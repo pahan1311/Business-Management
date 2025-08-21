@@ -1,23 +1,9 @@
 // server.js
-import express from "express";
-import cors from "cors";
-import pool from "./db.js";
+import './db.js'; // initialize DB connection
+import app from './app.js';
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+const PORT = process.env.PORT || 5000;
 
-// Test API
-app.get("/", (req, res) => {
-  res.send("Express + PostgreSQL backend running 🚀");
-});
-
-// Get all customers
-
-
-// Add a new customer
-
-
-app.listen(5000, () => {
-  console.log("Server running on http://localhost:5000");
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
