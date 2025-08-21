@@ -1,0 +1,329 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+  DELIVERY
+  CUSTOMER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY_FOR_DISPATCH
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELED
+  RETURNED
+}
+
+enum DeliveryStatus {
+  ASSIGNED
+  PICKED_UP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+  RETURNED
+  CANCELED
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+enum TaskType {
+  PREPARE_ORDER
+  INVENTORY_CHECK
+  CUSTOMER_SERVICE
+  DELIVERY_ISSUE
+  OTHER
+}
+
+enum InquiryStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  RESERVED
+  RELEASED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  role      UserRole
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  refreshTokens RefreshToken[]
+  assignedTasks Task[]         @relation("TaskAssignee")
+  createdTasks  Task[]         @relation("TaskCreator")
+  deliveries    Delivery[]
+  inquiries     Inquiry[]      @relation("InquiryAssignee")
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  phone       String
+  address     String
+  city        String
+  state       String
+  zipCode     String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  orders     Order[]
+  inquiries  Inquiry[]
+
+  @@map("customers")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  sku         String   @unique
+  price       Decimal  @db.Decimal(10, 2)
+  onHand      Int      @default(0)
+  reserved    Int      @default(0)
+  reorderPoint Int     @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  orderItems      OrderItem[]
+  stockMovements  StockMovement[]
+
+  @@map("products")
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  orderNumber  String      @unique
+  customerId   String
+  status       OrderStatus @default(PENDING)
+  totalAmount  Decimal     @db.Decimal(10, 2)
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relations
+  customer      Customer       @relation(fields: [customerId], references: [id])
+  items         OrderItem[]
+  statusEvents  OrderStatusEvent[]
+  delivery      Delivery?
+  qrTokens      QRToken[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model OrderStatusEvent {
+  id        String      @id @default(cuid())
+  orderId   String
+  status    OrderStatus
+  notes     String?
+  createdAt DateTime    @default(now())
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_status_events")
+}
+
+model Delivery {
+  id               String         @id @default(cuid())
+  orderId          String         @unique
+  assignedToId     String?
+  status           DeliveryStatus @default(ASSIGNED)
+  pickupAddress    String
+  deliveryAddress  String
+  notes            String?
+  scheduledAt      DateTime?
+  pickedUpAt       DateTime?
+  deliveredAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  // Relations
+  order         Order                  @relation(fields: [orderId], references: [id])
+  assignedTo    User?                  @relation(fields: [assignedToId], references: [id])
+  statusEvents  DeliveryStatusEvent[]
+  issues        DeliveryIssue[]
+  qrTokens      QRToken[]
+
+  @@map("deliveries")
+}
+
+model DeliveryStatusEvent {
+  id         String         @id @default(cuid())
+  deliveryId String
+  status     DeliveryStatus
+  notes      String?
+  location   String?
+  createdAt  DateTime       @default(now())
+
+  // Relations
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@map("delivery_status_events")
+}
+
+model DeliveryIssue {
+  id          String   @id @default(cuid())
+  deliveryId  String
+  description String
+  isResolved  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@map("delivery_issues")
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  type        TaskType   @default(OTHER)
+  status      TaskStatus @default(PENDING)
+  priority    Int        @default(1)
+  assignedToId String?
+  createdById String
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  assignedTo User? @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  createdBy  User @relation("TaskCreator", fields: [createdById], references: [id])
+
+  @@map("tasks")
+}
+
+model Inquiry {
+  id           String        @id @default(cuid())
+  customerId   String
+  subject      String
+  description  String
+  status       InquiryStatus @default(OPEN)
+  priority     Int           @default(1)
+  assignedToId String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Relations
+  customer   Customer @relation(fields: [customerId], references: [id])
+  assignedTo User?    @relation("InquiryAssignee", fields: [assignedToId], references: [id])
+
+  @@map("inquiries")
+}
+
+model QRToken {
+  id         String    @id @default(cuid())
+  token      String    @unique
+  orderId    String?
+  deliveryId String?
+  context    String?   // 'pickup', 'deliver', 'track'
+  expiresAt  DateTime
+  isUsed     Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  // Relations
+  order    Order?    @relation(fields: [orderId], references: [id])
+  delivery Delivery? @relation(fields: [deliveryId], references: [id])
+
+  @@map("qr_tokens")
+}
+
+model StockMovement {
+  id          String            @id @default(cuid())
+  productId   String
+  type        StockMovementType
+  quantity    Int
+  reference   String? // order number, adjustment reason, etc.
+  notes       String?
+  createdAt   DateTime          @default(now())
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("stock_movements")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entity     String
+  entityId   String
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
