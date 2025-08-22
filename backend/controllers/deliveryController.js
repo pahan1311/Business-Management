@@ -49,9 +49,34 @@ exports.getDeliveryById = async (req, res) => {
 // Get deliveries by delivery person
 exports.getDeliveriesByDeliveryPerson = async (req, res) => {
   try {
-    const deliveries = await Delivery.find({ deliveryPerson: req.params.deliveryPersonId })
+    // Find deliveries assigned to this delivery person
+    let deliveries = await Delivery.find({ deliveryPerson: req.params.deliveryPersonId })
       .populate('order')
       .sort({ createdAt: -1 });
+    
+    // For any deliveries that don't have detailed fields already,
+    // enrich them with order information
+    for (let i = 0; i < deliveries.length; i++) {
+      if (!deliveries[i].orderId && deliveries[i].order) {
+        deliveries[i].orderId = deliveries[i].order.orderNumber || 
+                               deliveries[i].order._id.toString().slice(-6);
+      }
+      
+      if (!deliveries[i].customerName && deliveries[i].order?.customer) {
+        deliveries[i].customerName = deliveries[i].order.customer.name || 'Customer';
+      }
+      
+      if (!deliveries[i].orderValue && deliveries[i].order) {
+        deliveries[i].orderValue = deliveries[i].order.totalAmount || 0;
+      }
+      
+      if (!deliveries[i].address && deliveries[i].order) {
+        deliveries[i].address = deliveries[i].order.shippingAddress || 
+                               deliveries[i].order.address || {};
+      }
+      
+      await deliveries[i].save();
+    }
     
     res.status(200).json(deliveries);
   } catch (error) {
@@ -63,7 +88,18 @@ exports.getDeliveriesByDeliveryPerson = async (req, res) => {
 // Create new delivery
 exports.createDelivery = async (req, res) => {
   try {
-    const { order: orderId, scheduledDate, location, notes } = req.body;
+    const { 
+      order: orderId, 
+      deliveryPerson, 
+      scheduledDate, 
+      location, 
+      notes,
+      customerName,
+      contactPhone,
+      address,
+      items,
+      status
+    } = req.body;
     
     // Verify order exists
     const order = await Order.findById(orderId);
@@ -71,12 +107,27 @@ exports.createDelivery = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
     
+    // Calculate order value
+    let orderValue = 0;
+    if (items && Array.isArray(items)) {
+      orderValue = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    } else if (order.totalAmount) {
+      orderValue = order.totalAmount;
+    }
+    
     const newDelivery = new Delivery({
       order: orderId,
+      orderId: order.orderNumber || order._id.toString().slice(-6),
+      customerName: customerName || order.customer?.name || 'Customer',
+      contactPhone: contactPhone || order.customer?.phone || '',
+      address: address || order.shippingAddress || order.address || {},
+      orderValue: orderValue,
+      items: items || order.items || [],
+      deliveryPerson,
       scheduledDate,
       location,
       notes,
-      status: 'pending'
+      status: status || 'pending'
     });
     
     const savedDelivery = await newDelivery.save();
@@ -131,7 +182,7 @@ exports.updateDeliveryStatus = async (req, res) => {
     }
     
     // Validate status value
-    const validStatuses = ['pending', 'assigned', 'out_for_delivery', 'delivered', 'failed', 'cancelled'];
+    const validStatuses = ['pending', 'assigned', 'picked_up', 'in_transit', 'delivered', 'rejected', 'failed', 'cancelled'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ message: 'Invalid status value' });
     }

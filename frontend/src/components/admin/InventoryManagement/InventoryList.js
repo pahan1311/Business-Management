@@ -73,7 +73,8 @@ const InventoryList = () => {
 
   const handleDeleteItem = async (item) => {
     if (window.confirm(`Are you sure you want to delete ${item.name}?`)) {
-      await remove(item.id);
+      // Use _id (MongoDB) or fallback to id
+      await remove(item._id || item.id);
     }
   };
 
@@ -117,7 +118,8 @@ const InventoryList = () => {
       };
 
       if (selectedItem) {
-        await update(selectedItem.id, itemData);
+        // Use _id (MongoDB) or fallback to id
+        await update(selectedItem._id || selectedItem.id, itemData);
       } else {
         await create(itemData);
       }
@@ -185,7 +187,7 @@ const InventoryList = () => {
             <div className="col-4">
               <div className="card text-center">
                 <div className="card-body py-2">
-                  <h6 className="mb-0 text-success">{inventory.filter(i => i.quantity > i.minStock).length}</h6>
+                  <h6 className="mb-0 text-success">{inventoryArray.filter(i => i.quantity > i.minStock).length}</h6>
                   <small className="text-muted">In Stock</small>
                 </div>
               </div>
@@ -193,7 +195,7 @@ const InventoryList = () => {
             <div className="col-4">
               <div className="card text-center">
                 <div className="card-body py-2">
-                  <h6 className="mb-0 text-warning">{inventory.filter(i => i.quantity <= i.minStock && i.quantity > 0).length}</h6>
+                  <h6 className="mb-0 text-warning">{inventoryArray.filter(i => i.quantity <= i.minStock && i.quantity > 0).length}</h6>
                   <small className="text-muted">Low Stock</small>
                 </div>
               </div>
@@ -201,7 +203,7 @@ const InventoryList = () => {
             <div className="col-4">
               <div className="card text-center">
                 <div className="card-body py-2">
-                  <h6 className="mb-0 text-danger">{inventory.filter(i => i.quantity <= 0).length}</h6>
+                  <h6 className="mb-0 text-danger">{inventoryArray.filter(i => i.quantity <= 0).length}</h6>
                   <small className="text-muted">Out of Stock</small>
                 </div>
               </div>
@@ -236,7 +238,7 @@ const InventoryList = () => {
                   {filteredInventory.map(item => {
                     const stockStatus = getStockStatus(item);
                     return (
-                      <tr key={item.id}>
+                      <tr key={item._id || item.id}>
                         <td>
                           <div>
                             <strong>{item.name}</strong>

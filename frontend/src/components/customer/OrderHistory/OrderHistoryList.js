@@ -148,7 +148,7 @@ const OrderHistoryList = () => {
                 <div className="list-group list-group-flush">
                   {filteredOrders.map(order => (
                     <div 
-                      key={order.id} 
+                      key={order._id || order.id} 
                       className={`list-group-item list-group-item-action ${selectedOrder?.id === order.id ? 'active' : ''}`}
                       onClick={() => setSelectedOrder(order)}
                       style={{ cursor: 'pointer' }}

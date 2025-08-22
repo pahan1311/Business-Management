@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { deliveryAPI } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
+import { useApp } from '../context/AppContext';
+import { Modal, Button } from 'react-bootstrap';
 import StatusBadge from '../components/common/StatusBadge';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import { formatDate, formatCurrency } from '../utils/helpers';
+import { formatCurrency, formatDate } from '../utils/helpers';
 
 const DeliveryDashboard = () => {
   const { user } = useAuth();
+  const { addNotification } = useApp();
   const [deliveries, setDeliveries] = useState([]);
   const [stats, setStats] = useState({
     totalDeliveries: 0,
@@ -15,17 +18,23 @@ const DeliveryDashboard = () => {
     completedDeliveries: 0
   });
   const [loading, setLoading] = useState(true);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedDelivery, setSelectedDelivery] = useState(null);
+  const [actionType, setActionType] = useState(null); // 'accept' or 'reject'
 
   useEffect(() => {
-    if (user?.id) {
+    if (user?._id || user?.id) {
       fetchDeliveryData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const fetchDeliveryData = async () => {
     try {
       setLoading(true);
-      const response = await deliveryAPI.getByDeliveryPerson(user.id);
+      const userId = user._id || user.id;
+      const response = await deliveryAPI.getByDeliveryPerson(userId);
       const deliveryTasks = response.data;
       
       setDeliveries(deliveryTasks.slice(0, 10)); // Show recent deliveries
@@ -54,13 +63,67 @@ const DeliveryDashboard = () => {
       setLoading(false);
     }
   };
+  
+  const handleAcceptDelivery = (delivery) => {
+    setSelectedDelivery(delivery);
+    setActionType('accept');
+    setShowConfirmModal(true);
+  };
+  
+  const handleRejectDelivery = (delivery) => {
+    setSelectedDelivery(delivery);
+    setActionType('reject');
+    setShowConfirmModal(true);
+  };
+  
+  const handleViewDetails = (delivery) => {
+    setSelectedDelivery(delivery);
+    setShowDetailsModal(true);
+  };
+  
+  const confirmAction = async () => {
+    try {
+      if (actionType === 'accept') {
+        await deliveryAPI.updateStatus(selectedDelivery._id, 'picked_up');
+        addNotification({
+          type: 'success',
+          message: 'Delivery accepted successfully'
+        });
+      } else if (actionType === 'reject') {
+        await deliveryAPI.updateStatus(selectedDelivery._id, 'rejected');
+        addNotification({
+          type: 'info',
+          message: 'Delivery rejected'
+        });
+      }
+      
+      await fetchDeliveryData(); // Refresh data
+    } catch (error) {
+      console.error('Error updating delivery:', error);
+      addNotification({
+        type: 'error',
+        message: `Failed to ${actionType} delivery`
+      });
+    } finally {
+      setShowConfirmModal(false);
+      setSelectedDelivery(null);
+    }
+  };
 
   const updateDeliveryStatus = async (deliveryId, status) => {
     try {
       await deliveryAPI.updateStatus(deliveryId, status);
+      addNotification({
+        type: 'success',
+        message: `Delivery status updated to ${status.replace('_', ' ')}`
+      });
       await fetchDeliveryData(); // Refresh data
     } catch (error) {
       console.error('Failed to update delivery status:', error);
+      addNotification({
+        type: 'error',
+        message: 'Failed to update delivery status'
+      });
     }
   };
 
@@ -170,42 +233,52 @@ const DeliveryDashboard = () => {
                         <th>Address</th>
                         <th>Status</th>
                         <th>Value</th>
+                        <th>Scheduled</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {deliveries.map(delivery => (
-                        <tr key={delivery.id}>
+                      {deliveries.map((delivery, index) => (
+                        <tr key={delivery._id || delivery.id || `delivery-${index}`}>
                           <td>#{delivery.orderId}</td>
                           <td>{delivery.customerName}</td>
                           <td>
                             <small>
                               {typeof delivery.address === 'object' 
                                 ? `${delivery.address.street || ''}, 
-                                   ${delivery.address.city || ''}, 
-                                   ${delivery.address.state || ''} 
+                                   ${delivery.address.city || ''}${delivery.address.city && delivery.address.state ? ', ' : ''} 
+                                   ${delivery.address.state || ''}${(delivery.address.state || delivery.address.city) && delivery.address.zip ? ' ' : ''}
                                    ${delivery.address.zip || ''}`
-                                : delivery.address}
+                                : delivery.address || 'No address'}
                             </small>
                           </td>
                           <td>
                             <StatusBadge status={delivery.status} />
                           </td>
                           <td>{formatCurrency(delivery.orderValue)}</td>
+                          <td>{delivery.scheduledDate ? formatDate(delivery.scheduledDate) : 'ASAP'}</td>
                           <td>
                             <div className="btn-group btn-group-sm">
                               {delivery.status === 'assigned' && (
-                                <button
-                                  className="btn btn-outline-primary"
-                                  onClick={() => updateDeliveryStatus(delivery.id, 'picked_up')}
-                                >
-                                  Pick Up
-                                </button>
+                                <>
+                                  <button
+                                    className="btn btn-outline-success"
+                                    onClick={() => handleAcceptDelivery(delivery)}
+                                  >
+                                    Accept
+                                  </button>
+                                  <button
+                                    className="btn btn-outline-danger"
+                                    onClick={() => handleRejectDelivery(delivery)}
+                                  >
+                                    Reject
+                                  </button>
+                                </>
                               )}
                               {delivery.status === 'picked_up' && (
                                 <button
                                   className="btn btn-outline-info"
-                                  onClick={() => updateDeliveryStatus(delivery.id, 'in_transit')}
+                                  onClick={() => updateDeliveryStatus(delivery._id, 'in_transit')}
                                 >
                                   In Transit
                                 </button>
@@ -213,12 +286,15 @@ const DeliveryDashboard = () => {
                               {delivery.status === 'in_transit' && (
                                 <button
                                   className="btn btn-outline-success"
-                                  onClick={() => updateDeliveryStatus(delivery.id, 'delivered')}
+                                  onClick={() => updateDeliveryStatus(delivery._id, 'delivered')}
                                 >
                                   Delivered
                                 </button>
                               )}
-                              <button className="btn btn-outline-secondary">
+                              <button 
+                                className="btn btn-outline-secondary"
+                                onClick={() => handleViewDetails(delivery)}
+                              >
                                 Details
                               </button>
                             </div>
@@ -308,6 +384,153 @@ const DeliveryDashboard = () => {
           </div>
         </div>
       </div>
+      
+      {/* Confirmation Modal */}
+      <Modal show={showConfirmModal} onHide={() => setShowConfirmModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {actionType === 'accept' ? 'Accept Delivery' : 'Reject Delivery'}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {selectedDelivery && (
+            <div>
+              <p>Are you sure you want to {actionType} this delivery?</p>
+              <p><strong>Order ID:</strong> {selectedDelivery.orderId}</p>
+              <p><strong>Customer:</strong> {selectedDelivery.customerName}</p>
+              {actionType === 'reject' && (
+                <div className="alert alert-warning">
+                  Rejecting this delivery will make it available for other delivery personnel.
+                </div>
+              )}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
+            Cancel
+          </Button>
+          <Button 
+            variant={actionType === 'accept' ? 'success' : 'danger'} 
+            onClick={confirmAction}
+          >
+            {actionType === 'accept' ? 'Accept' : 'Reject'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+      
+      {/* Delivery Details Modal */}
+      <Modal show={showDetailsModal} onHide={() => setShowDetailsModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Delivery Details</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {selectedDelivery && (
+            <div>
+              <div className="mb-3">
+                <h5>Order Information</h5>
+                <p className="mb-1"><strong>Order ID:</strong> #{selectedDelivery.orderId}</p>
+                <p className="mb-1"><strong>Status:</strong> <StatusBadge status={selectedDelivery.status} /></p>
+                <p className="mb-1"><strong>Total Value:</strong> {formatCurrency(selectedDelivery.orderValue)}</p>
+              </div>
+              
+              <div className="mb-3">
+                <h5>Customer Information</h5>
+                <p className="mb-1"><strong>Name:</strong> {selectedDelivery.customerName}</p>
+                <p className="mb-1"><strong>Phone:</strong> {selectedDelivery.contactPhone || 'N/A'}</p>
+                <p className="mb-1"><strong>Address:</strong></p>
+                <div className="alert alert-light">
+                  {typeof selectedDelivery.address === 'object' 
+                    ? (<>
+                        {selectedDelivery.address.street || ''}<br />
+                        {selectedDelivery.address.city || ''}{selectedDelivery.address.city && selectedDelivery.address.state ? ', ' : ''} 
+                        {selectedDelivery.address.state || ''} {selectedDelivery.address.zip || ''}<br />
+                        {selectedDelivery.address.country || ''}
+                      </>)
+                    : selectedDelivery.address || 'No address provided'
+                  }
+                </div>
+              </div>
+              
+              {selectedDelivery.items && selectedDelivery.items.length > 0 && (
+                <div className="mb-3">
+                  <h5>Items</h5>
+                  <ul className="list-group">
+                    {selectedDelivery.items.map((item, idx) => (
+                      <li key={`item-${idx}`} className="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                          <span className="fw-bold">{item.name}</span>
+                          <br />
+                          <small>{formatCurrency(item.price)} x {item.quantity}</small>
+                        </div>
+                        <span className="fw-bold">{formatCurrency(item.price * item.quantity)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {selectedDelivery.notes && (
+                <div className="mb-3">
+                  <h5>Notes</h5>
+                  <div className="alert alert-info">
+                    {selectedDelivery.notes}
+                  </div>
+                </div>
+              )}
+              
+              <div className="mb-3">
+                <h5>Delivery Timeline</h5>
+                <ul className="list-unstyled">
+                  <li className="mb-2">
+                    <i className="bi bi-check-circle text-success me-2"></i>
+                    <strong>Created:</strong> {formatDate(selectedDelivery.createdAt)}
+                  </li>
+                  {selectedDelivery.scheduledDate && (
+                    <li className="mb-2">
+                      <i className="bi bi-calendar me-2"></i>
+                      <strong>Scheduled:</strong> {formatDate(selectedDelivery.scheduledDate)}
+                    </li>
+                  )}
+                  {selectedDelivery.deliveredAt && (
+                    <li className="mb-2">
+                      <i className="bi bi-truck me-2"></i>
+                      <strong>Delivered:</strong> {formatDate(selectedDelivery.deliveredAt)}
+                    </li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowDetailsModal(false)}>
+            Close
+          </Button>
+          {selectedDelivery?.status === 'picked_up' && (
+            <Button 
+              variant="info" 
+              onClick={() => {
+                updateDeliveryStatus(selectedDelivery._id, 'in_transit');
+                setShowDetailsModal(false);
+              }}
+            >
+              Mark In Transit
+            </Button>
+          )}
+          {selectedDelivery?.status === 'in_transit' && (
+            <Button 
+              variant="success" 
+              onClick={() => {
+                updateDeliveryStatus(selectedDelivery._id, 'delivered');
+                setShowDetailsModal(false);
+              }}
+            >
+              Mark Delivered
+            </Button>
+          )}
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

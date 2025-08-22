@@ -8,8 +8,8 @@ exports.getPublicProducts = async (req, res) => {
     
     // Build query
     const query = { 
-      isPublished: true, // Only return published products
-      stock: { $gt: 0 }  // Only products with stock available
+      active: true, // Only return active products
+      quantity: { $gt: 0 }  // Only products with quantity available
     };
     
     if (category) query.category = category;
@@ -27,7 +27,7 @@ exports.getPublicProducts = async (req, res) => {
     }
     
     const products = await Inventory.find(query)
-      .select('name description price imageUrl category stock') // Only return necessary fields
+      .select('name description price imageUrl category quantity') // Only return necessary fields
       .sort(sort)
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit));
@@ -51,8 +51,8 @@ exports.getPublicProductById = async (req, res) => {
   try {
     const product = await Inventory.findOne({
       _id: req.params.id,
-      isPublished: true
-    }).select('name description price imageUrl category stock');
+      active: true
+    }).select('name description price imageUrl category quantity');
     
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
@@ -163,11 +163,16 @@ exports.createInventory = async (req, res) => {
     const { name, sku, category, price, quantity } = req.body;
     
     // Validate required fields
-    if (!name || !category || price == null) {
-      return res.status(400).json({ message: 'Missing required fields' });
+    if (!name || !category) {
+      return res.status(400).json({ message: 'Missing required fields: name and category are required' });
     }
     
-    // Check if SKU already exists
+    // Validate price
+    if (price === undefined || price === null || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
+      return res.status(400).json({ message: 'Price is required and must be a non-negative number' });
+    }
+    
+    // Check if SKU already exists (if provided)
     if (sku) {
       const existingItem = await Inventory.findOne({ sku });
       if (existingItem) {
@@ -175,12 +180,44 @@ exports.createInventory = async (req, res) => {
       }
     }
     
-    const newItem = new Inventory(req.body);
+    // Set defaults if not provided
+    const inventoryData = {
+      ...req.body,
+      quantity: quantity || 0,
+      active: req.body.active === undefined ? true : req.body.active
+    };
+    
+    // If SKU is explicitly set to null, remove it so our pre-save hook can generate one
+    if (inventoryData.sku === null) {
+      delete inventoryData.sku;
+    }
+    
+    // Create and save the inventory item
+    const newItem = new Inventory(inventoryData);
+    
+    console.log('Creating new inventory item:', inventoryData);
     const savedItem = await newItem.save();
+    console.log('Saved inventory item successfully:', savedItem._id);
     
     res.status(201).json(savedItem);
   } catch (error) {
     console.error('Error in createInventory:', error);
+    
+    // Provide more specific error messages for common issues
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        message: 'Validation Error', 
+        details: Object.values(error.errors).map(e => e.message) 
+      });
+    }
+    
+    if (error.code === 11000 || error.name === 'MongoServerError') {
+      return res.status(400).json({ 
+        message: 'Duplicate key error, check if SKU is already in use',
+        details: error.message
+      });
+    }
+    
     res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };

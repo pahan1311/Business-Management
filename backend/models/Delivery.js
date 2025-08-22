@@ -7,13 +7,33 @@ const DeliverySchema = new mongoose.Schema({
     ref: 'Order',
     required: true
   },
+  orderId: {
+    type: String
+  },
+  customerName: {
+    type: String
+  },
+  contactPhone: {
+    type: String
+  },
+  address: {
+    type: mongoose.Schema.Types.Mixed
+  },
+  orderValue: {
+    type: Number
+  },
+  items: [
+    {
+      type: mongoose.Schema.Types.Mixed
+    }
+  ],
   deliveryPerson: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
   status: {
     type: String,
-    enum: ['pending', 'assigned', 'out_for_delivery', 'delivered', 'failed', 'cancelled'],
+    enum: ['pending', 'assigned', 'picked_up', 'in_transit', 'delivered', 'rejected', 'failed', 'cancelled'],
     default: 'pending'
   },
   location: {

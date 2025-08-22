@@ -8,6 +8,7 @@ import CustomerList from '../components/admin/CustomerManagement/CustomerList';
 import StaffList from '../components/admin/StaffManagement/StaffList';
 import OrderList from '../components/admin/OrderManagement/OrderList';
 import InventoryList from '../components/admin/InventoryManagement/InventoryList';
+import DeliveryPersonList from '../components/admin/DeliveryManagement/DeliveryPersonList';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -49,7 +50,13 @@ const AdminDashboard = () => {
       }
       
       try {
-        inventoryRes = await inventoryAPI.getLowStock();
+        // Fetch all inventory items for accurate product count
+        inventoryRes = await inventoryAPI.getAll();
+        
+        // Also fetch low stock items for the low stock section
+        const lowStockRes = await inventoryAPI.getLowStock();
+        // Store low stock items separately
+        inventoryRes.lowStockItems = lowStockRes.data || [];
       } catch (err) {
         console.error('Error fetching inventory:', err);
       }
@@ -69,7 +76,12 @@ const AdminDashboard = () => {
       // Calculate counts safely
       const orderCount = ordersData.total || (Array.isArray(ordersData) ? ordersData.length : 0);
       const customerCount = Array.isArray(customersData) ? customersData.length : 0;
-      const productCount = Array.isArray(inventoryData) ? inventoryData.length : 0;
+      
+      // Get product count from inventory response
+      const productCount = inventoryData.total || 
+                         (inventoryData.items ? inventoryData.items.length : 
+                          (Array.isArray(inventoryData) ? inventoryData.length : 0));
+      
       const deliveryCount = Array.isArray(deliveriesData) ? deliveriesData.length : 0;
       
       // Get recent orders safely
@@ -77,7 +89,9 @@ const AdminDashboard = () => {
                          (Array.isArray(ordersData) ? ordersData.slice(0, 5) : []);
       
       // Get low stock items safely
-      const lowStock = Array.isArray(inventoryData) ? inventoryData.slice(0, 5) : [];
+      const lowStock = inventoryRes.lowStockItems && Array.isArray(inventoryRes.lowStockItems) 
+                     ? inventoryRes.lowStockItems.slice(0, 5) 
+                     : [];
 
       setStats({
         totalOrders: orderCount,
@@ -113,65 +127,72 @@ const AdminDashboard = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="row g-4 mb-4">
-          <div className="col-md-3">
-            <div className="card bg-primary text-white">
-              <div className="card-body">
-                <div className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 className="card-title mb-0">Total Orders</h6>
-                    <h2 className="mb-0">{stats.totalOrders}</h2>
-                  </div>
-                  <i className="bi bi-cart fs-1 opacity-50"></i>
+      <div className="row g-4 mb-4">
+        <div className="col-md-3">
+          <div className="card bg-primary text-white">
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 className="card-title mb-0">Total Orders</h6>
+                  <h2 className="mb-0">{stats.totalOrders}</h2>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-md-3">
-            <div className="card bg-success text-white">
-              <div className="card-body">
-                <div className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 className="card-title mb-0">Total Customers</h6>
-                    <h2 className="mb-0">{stats.totalCustomers}</h2>
-                  </div>
-                  <i className="bi bi-people fs-1 opacity-50"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-md-3">
-            <div className="card bg-info text-white">
-              <div className="card-body">
-                <div className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 className="card-title mb-0">Products</h6>
-                    <h2 className="mb-0">{stats.totalProducts}</h2>
-                  </div>
-                  <i className="bi bi-box-seam fs-1 opacity-50"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-md-3">
-            <div className="card bg-warning text-white">
-              <div className="card-body">
-                <div className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 className="card-title mb-0">Pending Deliveries</h6>
-                    <h2 className="mb-0">{stats.pendingDeliveries}</h2>
-                  </div>
-                  <i className="bi bi-truck fs-1 opacity-50"></i>
-                </div>
+                <i className="bi bi-cart fs-1 opacity-50"></i>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="row g-4">
+        <div className="col-md-3">
+          <div className="card bg-success text-white">
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 className="card-title mb-0">Total Customers</h6>
+                  <h2 className="mb-0">{stats.totalCustomers}</h2>
+                </div>
+                <i className="bi bi-people fs-1 opacity-50"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-md-3">
+          <div className="card bg-info text-white">
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 className="card-title mb-0">Products</h6>
+                  <h2 className="mb-0">{stats.totalProducts}</h2>
+                </div>
+                <i className="bi bi-box-seam fs-1 opacity-50"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-md-3">
+          <div className="card bg-warning text-white position-relative">
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 className="card-title mb-0">Pending Deliveries</h6>
+                  <h2 className="mb-0">{stats.pendingDeliveries}</h2>
+                </div>
+                <i className="bi bi-truck fs-1 opacity-50"></i>
+              </div>
+              <Button
+                variant="light"
+                size="sm"
+                className="position-absolute bottom-0 end-0 m-2"
+                onClick={() => setActiveTab('delivery')}
+              >
+                <i className="bi bi-person-badge me-1"></i>
+                Delivery Staff
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>        <div className="row g-4">
           {/* Recent Orders */}
           <div className="col-md-8">
             <div className="card">
@@ -200,14 +221,14 @@ const AdminDashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {stats.recentOrders.map(order => (
-                          <tr key={order.id || order._id}>
-                            <td>#{order.id || order._id?.substring(0, 6)}</td>
-                            <td>{order.customerName || order.customer?.name}</td>
+                        {stats.recentOrders.map((order, index) => (
+                          <tr key={order._id || order.id || `order-${index}`}>
+                            <td>#{order._id?.substring(0, 6) || order.id?.substring(0, 6) || `OR${index}`}</td>
+                            <td>{order.customerName || order.customer?.name || "Customer"}</td>
                             <td>
                               <StatusBadge status={order.status} />
                             </td>
-                            <td>{formatCurrency(order.total || order.totalAmount)}</td>
+                            <td>{formatCurrency(order.total || order.totalAmount || 0)}</td>
                             <td>{formatDate(order.createdAt)}</td>
                           </tr>
                         ))}
@@ -236,8 +257,8 @@ const AdminDashboard = () => {
                   </div>
                 ) : (
                   <div className="list-group list-group-flush">
-                    {stats.lowStockItems.map(item => (
-                      <div key={item.id || item._id} className="list-group-item px-0">
+                    {stats.lowStockItems.map((item, index) => (
+                      <div key={item._id || item.id || `lowstock-item-${index}`} className="list-group-item px-0">
                         <div className="d-flex justify-content-between align-items-center">
                           <div>
                             <h6 className="mb-1">{item.name}</h6>
@@ -277,10 +298,13 @@ const AdminDashboard = () => {
                 <Nav.Link eventKey="staff">Staff</Nav.Link>
               </Nav.Item>
               <Nav.Item>
-                <Nav.Link eventKey="orders">Orders</Nav.Link>
+                <Nav.Link eventKey="orders">Orders / Deliveries</Nav.Link>
               </Nav.Item>
               <Nav.Item>
                 <Nav.Link eventKey="inventory">Inventory</Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="delivery">Delivery Staff</Nav.Link>
               </Nav.Item>
             </Nav>
           </Col>
@@ -302,6 +326,9 @@ const AdminDashboard = () => {
               </Tab.Pane>
               <Tab.Pane eventKey="inventory">
                 <InventoryList />
+              </Tab.Pane>
+              <Tab.Pane eventKey="delivery">
+                <DeliveryPersonList />
               </Tab.Pane>
             </Tab.Content>
           </Col>

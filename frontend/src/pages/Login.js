@@ -163,17 +163,24 @@ const Login = () => {
                 <div className="text-center">
                   <h6 className="text-muted mb-2">Demo Accounts</h6>
                   <div className="row g-2">
-                    <div className="col-6">
+                    <div className="col-4">
                       <small className="d-block text-muted">
                         <strong>Admin:</strong><br />
                         admin@demo.com<br />
                         password
                       </small>
                     </div>
-                    <div className="col-6">
+                    <div className="col-4">
                       <small className="d-block text-muted">
                         <strong>Customer:</strong><br />
                         customer@demo.com<br />
+                        password
+                      </small>
+                    </div>
+                    <div className="col-4">
+                      <small className="d-block text-muted">
+                        <strong>Delivery:</strong><br />
+                        delivery@demo.com<br />
                         password
                       </small>
                     </div>

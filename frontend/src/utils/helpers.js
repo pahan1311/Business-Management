@@ -31,9 +31,11 @@ export const isValidPhone = (phone) => {
   return VALIDATION.PHONE_REGEX.test(phone);
 };
 
-// Generate random ID
+// Generate random ID that's more stable than Date.now()
 export const generateId = () => {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  return 'id_' + 
+    Math.random().toString(36).substring(2, 15) + 
+    Math.random().toString(36).substring(2, 15);
 };
 
 // Capitalize first letter

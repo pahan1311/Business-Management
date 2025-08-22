@@ -83,23 +83,50 @@ export const useCrud = (apiService) => {
   };
 
   const fetchAll = async (params = {}) => {
-    const result = await handleApiCall(() => apiService.getAll(params));
-    if (result.success) {
-      // Handle both array responses and paginated responses
-      if (Array.isArray(result.data)) {
-        setItems(result.data);
-      } else if (result.data && result.data.items) {
-        // Handle paginated response where items are in an 'items' property
-        setItems(result.data.items);
-      } else if (result.data && result.data.length === undefined) {
-        // For any other object type response, convert to array with the object as the only item
-        setItems([result.data]);
+    console.log('fetchAll called with params:', params);
+    try {
+      const result = await handleApiCall(() => apiService.getAll(params));
+      console.log('fetchAll result:', result);
+      
+      if (result.success) {
+        // Handle different response structures
+        if (Array.isArray(result.data)) {
+          console.log('Setting items from array:', result.data);
+          setItems(result.data);
+        } else if (result.data && result.data.users) {
+          // Handle response with users property
+          console.log('Setting items from users property:', result.data.users);
+          setItems(result.data.users);
+        } else if (result.data && result.data.orders) {
+          // Handle orders API response structure
+          console.log('Setting items from orders property:', result.data.orders);
+          setItems(result.data.orders);
+        } else if (result.data && result.data.items) {
+          // Handle paginated response where items are in an 'items' property
+          console.log('Setting items from items property:', result.data.items);
+          setItems(result.data.items);
+        } else if (result.data && result.data.length === undefined) {
+          // For any other object type response, convert to array with the object as the only item
+          console.log('Setting single item as array:', [result.data]);
+          setItems([result.data]);
+        } else {
+          // Fallback
+          console.log('Using fallback for data:', result.data || []);
+          setItems(result.data || []);
+        }
+        return result;
       } else {
-        // Fallback
-        setItems(result.data || []);
+        // Handle error case
+        console.error('API call failed but did not throw:', result);
+        setItems([]);
+        return result;
       }
+    } catch (err) {
+      // Handle any errors that might have been missed
+      console.error('Unexpected error in fetchAll:', err);
+      setItems([]);
+      return { success: false, error: err.message };
     }
-    return result;
   };
 
   const fetchById = async (id) => {
@@ -123,7 +150,7 @@ export const useCrud = (apiService) => {
       'Item updated successfully'
     );
     if (result.success) {
-      setItems(prev => prev.map(i => i.id === id ? result.data : i));
+      setItems(prev => prev.map(i => (i.id === id || i._id === id) ? result.data : i));
     }
     return result;
   };
@@ -134,7 +161,7 @@ export const useCrud = (apiService) => {
       'Item deleted successfully'
     );
     if (result.success) {
-      setItems(prev => prev.filter(i => i.id !== id));
+      setItems(prev => prev.filter(i => (i.id !== id && i._id !== id)));
     }
     return result;
   };

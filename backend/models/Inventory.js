@@ -9,8 +9,7 @@ const InventorySchema = new mongoose.Schema({
   },
   sku: {
     type: String,
-    unique: true,
-    trim: true
+    trim: true,
   },
   description: {
     type: String,
@@ -36,6 +35,10 @@ const InventorySchema = new mongoose.Schema({
     type: Number,
     default: 5
   },
+  imageUrl: {
+    type: String,
+    default: ''
+  },
   images: [{
     type: String
   }],
@@ -50,6 +53,34 @@ const InventorySchema = new mongoose.Schema({
   }
 }, {
   timestamps: true
+});
+
+// Create a sparse unique index on sku field - allows null/undefined values
+InventorySchema.index({ sku: 1 }, { unique: true, sparse: true });
+
+// Generate a unique SKU if none is provided
+InventorySchema.pre('save', async function(next) {
+  try {
+    // Only generate SKU if it's not provided
+    if (!this.sku) {
+      // Generate a SKU based on category and name
+      const prefix = this.category ? this.category.substring(0, 3).toUpperCase() : 'ITM';
+      const timestamp = Date.now().toString().slice(-6);
+      const nameInitials = this.name
+        .split(' ')
+        .map(word => word.charAt(0))
+        .join('')
+        .toUpperCase()
+        .slice(0, 3);
+      
+      // Combine parts to create unique SKU
+      const generatedSku = `${prefix}-${nameInitials}-${timestamp}`;
+      this.sku = generatedSku;
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Static method to find low stock items

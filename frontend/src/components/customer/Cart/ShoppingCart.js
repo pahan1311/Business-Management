@@ -4,7 +4,7 @@ import { orderAPI } from '../../../services/api';
 import { formatCurrency } from '../../../utils/helpers';
 import { useAuth } from '../../../hooks/useAuth';
 
-const ShoppingCart = ({ cartItems, updateQuantity, removeFromCart, clearCart }) => {
+const ShoppingCart = ({ cartItems, updateQuantity, removeFromCart, clearCart, onOrderComplete }) => {
   const { user } = useAuth();
   const [showCheckout, setShowCheckout] = useState(false);
   const [orderForm, setOrderForm] = useState({
@@ -80,8 +80,18 @@ const ShoppingCart = ({ cartItems, updateQuantity, removeFromCart, clearCart }) 
     try {
       setLoading(true);
       
+      // Verify user is logged in
+      if (!user || (!user._id && !user.id)) {
+        throw new Error('You must be logged in to place an order');
+      }
+      
+      // Verify cart has items
+      if (!cartItems || cartItems.length === 0) {
+        throw new Error('Your cart is empty');
+      }
+      
       const orderData = {
-        customer: user.id,
+        customer: user._id || user.id, // Use _id as MongoDB uses this field
         items: cartItems.map(item => ({
           product: item.productId,
           name: item.name,
@@ -94,14 +104,24 @@ const ShoppingCart = ({ cartItems, updateQuantity, removeFromCart, clearCart }) 
         notes: orderForm.notes
       };
       
+      console.log('Placing order with data:', orderData);
       const response = await orderAPI.create(orderData);
+      console.log('Order created successfully:', response.data);
+      
       setOrderSuccess(true);
       setOrderNumber(response.data._id);
       clearCart();
       
+      // Call the callback function if provided
+      if (typeof onOrderComplete === 'function') {
+        onOrderComplete();
+      }
+      
     } catch (error) {
       console.error('Error placing order:', error);
-      alert('Failed to place order. Please try again.');
+      // Get more specific error message from the API response if available
+      const errorMsg = error.response?.data?.message || error.message || 'Failed to place order. Please try again.';
+      alert(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -112,6 +132,8 @@ const ShoppingCart = ({ cartItems, updateQuantity, removeFromCart, clearCart }) 
       setShowCheckout(false);
       setOrderSuccess(false);
       setOrderNumber(null);
+      
+      // No need to call onOrderComplete here as it's already called after order creation
     }
   };
 
@@ -140,7 +162,7 @@ const ShoppingCart = ({ cartItems, updateQuantity, removeFromCart, clearCart }) 
             <>
               <ListGroup variant="flush">
                 {cartItems.map((item, index) => (
-                  <ListGroup.Item key={index}>
+                  <ListGroup.Item key={`cart-item-${item.productId || ''}-${index}`}>
                     <div className="d-flex justify-content-between align-items-center">
                       <div className="d-flex align-items-center">
                         {item.image ? (
@@ -214,10 +236,12 @@ const ShoppingCart = ({ cartItems, updateQuantity, removeFromCart, clearCart }) 
               <div className="d-grid mt-4">
                 <Button 
                   variant="primary"
+                  size="lg"
+                  className="py-2"
                   onClick={() => setShowCheckout(true)}
                 >
                   <i className="bi bi-credit-card me-2"></i>
-                  Checkout
+                  Proceed to Checkout
                 </Button>
               </div>
             </>
@@ -238,8 +262,42 @@ const ShoppingCart = ({ cartItems, updateQuantity, removeFromCart, clearCart }) 
                 </span>
               </div>
               <h4 className="mb-3">Thank You for Your Order!</h4>
-              <p>Your order #{orderNumber} has been placed successfully.</p>
-              <p>You can track your order status in the Orders section.</p>
+              <div className="alert alert-success mb-4">
+                <p className="mb-1">Your order <strong>#{orderNumber}</strong> has been placed successfully.</p>
+                <p className="mb-0">We are processing your order and will update you soon.</p>
+              </div>
+              
+              <div className="card mb-4">
+                <div className="card-header bg-light">
+                  <h5 className="mb-0">Order Summary</h5>
+                </div>
+                <div className="card-body">
+                  <div className="row mb-3">
+                    <div className="col-md-6 text-md-end fw-bold">Total Items:</div>
+                    <div className="col-md-6 text-md-start">{cartItems.length} items</div>
+                  </div>
+                  <div className="row mb-3">
+                    <div className="col-md-6 text-md-end fw-bold">Payment Method:</div>
+                    <div className="col-md-6 text-md-start">{orderForm.paymentMethod.replace('_', ' ').toUpperCase()}</div>
+                  </div>
+                  <div className="row mb-3">
+                    <div className="col-md-6 text-md-end fw-bold">Delivery Address:</div>
+                    <div className="col-md-6 text-md-start">
+                      {orderForm.deliveryAddress.street}, {orderForm.deliveryAddress.city}, 
+                      {orderForm.deliveryAddress.state} {orderForm.deliveryAddress.zip}
+                    </div>
+                  </div>
+                  <div className="row">
+                    <div className="col-md-6 text-md-end fw-bold">Total Amount:</div>
+                    <div className="col-md-6 text-md-start text-success fw-bold">{formatCurrency(totalAmount)}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="alert alert-info">
+                <i className="bi bi-info-circle me-2"></i>
+                You can track your order status in the <strong>Orders</strong> tab of your dashboard.
+              </div>
             </div>
           ) : (
             <Form onSubmit={handleCheckout}>
@@ -386,9 +444,11 @@ const ShoppingCart = ({ cartItems, updateQuantity, removeFromCart, clearCart }) 
                 Cancel
               </Button>
               <Button 
-                variant="primary" 
+                variant="success" 
                 onClick={handleCheckout} 
                 disabled={loading}
+                size="lg"
+                className="px-4"
               >
                 {loading ? (
                   <>
@@ -396,7 +456,10 @@ const ShoppingCart = ({ cartItems, updateQuantity, removeFromCart, clearCart }) 
                     Processing...
                   </>
                 ) : (
-                  <>Place Order ({formatCurrency(totalAmount)})</>
+                  <>
+                    <i className="bi bi-check-circle me-2"></i>
+                    Place Order ({formatCurrency(totalAmount)})
+                  </>
                 )}
               </Button>
             </>

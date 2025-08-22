@@ -3,7 +3,9 @@ import { Card, Button, Badge } from 'react-bootstrap';
 import { formatCurrency } from '../../../utils/helpers';
 
 const ProductCard = ({ product, onAddToCart }) => {
-  const { _id, name, description, price, imageUrl, category, stock } = product;
+  // Use quantity instead of stock for consistency with the backend model
+  const { _id, name, description, price, imageUrl, category, quantity } = product;
+  const stock = quantity; // For backward compatibility
 
   // Determine stock status and badge color
   const getStockStatus = () => {
@@ -32,7 +34,7 @@ const ProductCard = ({ product, onAddToCart }) => {
         price,
         image: imageUrl,
         quantity: 1,
-        stock
+        stock: quantity // Use the actual quantity from the product
       });
     }
   };

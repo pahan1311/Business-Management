@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer } from 'react';
+import { generateId } from '../utils/helpers';
 
 const AppContext = createContext();
 
@@ -75,7 +76,7 @@ const appReducer = (state, action) => {
       return { 
         ...state, 
         notifications: [...state.notifications, { 
-          id: Date.now(), 
+          id: generateId(), 
           ...action.payload 
         }] 
       };

@@ -21,6 +21,7 @@ const CustomerDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('products');
+  const [orderRefreshTrigger, setOrderRefreshTrigger] = useState(0);
 
   useEffect(() => {
     // Only fetch order data if user is logged in
@@ -28,7 +29,7 @@ const CustomerDashboard = () => {
       fetchCustomerData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, orderRefreshTrigger]);
 
   const fetchCustomerData = async () => {
     try {
@@ -65,7 +66,8 @@ const CustomerDashboard = () => {
       });
     } catch (error) {
       console.error('Failed to fetch customer data:', error);
-      // Show empty state when there's an error
+      // Set error state and show empty state when there's an error
+      setError('Could not load your orders. Please try again later.');
       setOrders([]);
       setStats({
         totalOrders: 0,
@@ -280,6 +282,10 @@ const CustomerDashboard = () => {
             updateQuantity={updateQuantity}
             removeFromCart={removeFromCart}
             clearCart={clearCart}
+            onOrderComplete={() => {
+              setOrderRefreshTrigger(prev => prev + 1);
+              setActiveTab('orders'); // Switch to orders tab after successful order
+            }}
           />
         </Col>
       </Row>

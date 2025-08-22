@@ -17,17 +17,30 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Log all API requests for debugging
+    console.log(`API Request: ${config.method.toUpperCase()} ${config.url}`, 
+                config.params || config.data);
+    
     return config;
   },
   (error) => {
+    console.error('API Request Error:', error);
     return Promise.reject(error);
   }
 );
 
 // Add response interceptor to handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`API Response Success: ${response.config.method.toUpperCase()} ${response.config.url}`, 
+                response.status, response.data);
+    return response;
+  },
   (error) => {
+    console.error(`API Response Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, 
+                  error.response?.status, error.response?.data || error.message);
+                  
     if (error.response?.status === 401) {
       // Token expired or invalid
       localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
@@ -91,6 +104,16 @@ export const deliveryAPI = {
     api.patch(`/deliveries/${id}/assign`, { deliveryPersonId }),
   getByDeliveryPerson: (deliveryPersonId) => 
     api.get(`/deliveries/delivery-person/${deliveryPersonId}`)
+};
+
+// User APIs for all user types (admin, staff, customer, delivery)
+export const userAPI = {
+  getAll: (params = {}) => api.get('/users', { params }),
+  getById: (id) => api.get(`/users/${id}`),
+  create: (userData) => api.post('/users', userData),
+  update: (id, userData) => api.put(`/users/${id}`, userData),
+  delete: (id) => api.delete(`/users/${id}`),
+  getByRole: (role) => api.get('/users', { params: { role } })
 };
 
 // Staff APIs
