@@ -10,7 +10,14 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "react-router-dom": "^6.26.1",
+    "bootstrap": "^5.3.3",
+    "react-bootstrap": "^2.10.4",
+    "axios": "^1.7.7",
+    "qr-scanner": "^1.4.2",
+    "qrcode": "^1.5.4",
+    "react-qr-code": "^2.0.15"
   },
   "scripts": {
     "start": "react-scripts start",
