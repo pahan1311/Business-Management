@@ -3,7 +3,9 @@ const express = require('express');
 const connectDB = require('./config/database');
 const env = require('./config/env');
 const errorHandler = require('./middleware/errorHandler');
+const cors = require('cors');
 
+const authRoutes = require('./routes/authRoutes');
 const customerRoutes = require('./routes/customerRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const orderRoutes = require('./routes/orderRoutes');
@@ -13,9 +15,12 @@ const qrCodeRoutes = require('./routes/qrCodeRoutes');
 
 const app = express();
 
+// Middleware
+app.use(cors());
 app.use(express.json());
 
 // API routes
+app.use('/api/auth', authRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/orders', orderRoutes);

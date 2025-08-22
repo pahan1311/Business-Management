@@ -28,7 +28,7 @@ class AuthService {
     }
   }
 
-  async register(userData) {
+  async signup(userData) {
     try {
       const response = await authAPI.register(userData);
       return { success: true, data: response.data };
@@ -38,6 +38,11 @@ class AuthService {
         error: error.response?.data?.message || 'Registration failed' 
       };
     }
+  }
+
+  async register(userData) {
+    // Alias for signup to maintain backward compatibility
+    return this.signup(userData);
   }
 
   logout() {
@@ -76,4 +81,5 @@ class AuthService {
   }
 }
 
-export default new AuthService();
+const authServiceInstance = new AuthService();
+export default authServiceInstance;

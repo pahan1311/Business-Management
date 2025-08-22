@@ -135,27 +135,50 @@ const Signup = () => {
 
     setLoading(true);
     try {
+      // Transform frontend form data to match backend User model
       const userData = {
-        ...formData,
         name: `${formData.firstName} ${formData.lastName}`,
-        createdAt: new Date().toISOString()
+        email: formData.email,
+        password: formData.password,
+        role: formData.role
       };
+      
+      // Add optional fields only if they have values
+      if (formData.phone) {
+        userData.phone = formData.phone;
+      }
+      
+      // Only add address if at least some fields are filled
+      if (formData.address.street || formData.address.city) {
+        userData.address = {
+          street: formData.address.street || '',
+          city: formData.address.city || '',
+          state: formData.address.state || '',
+          zip: formData.address.zipCode || '',
+          country: formData.address.country || 'USA'
+        };
+      }
+      
+      console.log('Sending user data:', userData);
 
-      const response = await authService.signup(userData);
+      const result = await authService.signup(userData);
       
-      // Show success message
-      alert('Account created successfully! Please log in with your credentials.');
-      
-      // Redirect to login page
-      navigate('/login');
+      if (result.success) {
+        // Show success message
+        alert('Account created successfully! Please log in with your credentials.');
+        
+        // Redirect to login page
+        navigate('/login');
+      } else {
+        // Show error message
+        setErrors({ submit: result.error });
+      }
     } catch (error) {
       console.error('Signup failed:', error);
       
-      if (error.response?.data?.message) {
-        setErrors({ general: error.response.data.message });
-      } else {
-        setErrors({ general: 'Failed to create account. Please try again.' });
-      }
+      const errorMessage = error.response?.data?.message || error.message || 'Registration failed';
+      setErrors({ submit: errorMessage });
+      alert('Signup failed: ' + errorMessage);
     } finally {
       setLoading(false);
     }
