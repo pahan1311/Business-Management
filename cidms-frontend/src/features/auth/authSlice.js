@@ -24,12 +24,20 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     setCredentials: (state, action) => {
-      const { user, token } = action.payload;
+      const { user, token, accessToken, refreshToken } = action.payload;
+      // Use accessToken if provided, fallback to token for backward compatibility
+      const authToken = accessToken || token;
+      console.log('Setting credentials:', { user: user?.email, hasToken: !!authToken });
       state.user = user;
-      state.token = token;
+      state.token = authToken;
       state.isAuthenticated = true;
-      localStorage.setItem('token', token);
+      localStorage.setItem('token', authToken);
       localStorage.setItem('user', JSON.stringify(user));
+      
+      // Store refresh token if provided
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+      }
     },
     logout: (state) => {
       state.user = null;
@@ -37,6 +45,7 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('refreshToken');
     },
   },
 });
