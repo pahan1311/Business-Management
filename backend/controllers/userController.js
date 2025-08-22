@@ -75,7 +75,24 @@ exports.getUsersByRole = async (req, res) => {
 // Get user by ID
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const { id } = req.params;
+    
+    let user;
+    
+    // Check if it's a valid MongoDB ObjectId format
+    if (id.match(/^[0-9a-fA-F]{24}$/)) {
+      // It's a full ObjectId
+      user = await User.findById(id).select('-password');
+    } else {
+      // Try to find by other identifiers
+      user = await User.findOne({
+        $or: [
+          { _id: id }, // In case it's still a valid ObjectId
+          { email: id },
+          { username: id }
+        ]
+      }).select('-password');
+    }
     
     if (!user) {
       return res.status(404).json({ message: 'User not found' });

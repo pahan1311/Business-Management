@@ -350,15 +350,48 @@ const OrderList = () => {
   };
   
   const downloadQRCode = () => {
+    if (!qrCodeData) {
+      alert('No QR code available to download');
+      return;
+    }
+    
+    // Create comprehensive filename
+    const deliveryId = selectedDeliveryForQR?._id?.toString().slice(-6) || 'unknown';
+    const orderNumber = selectedDeliveryForQR?.orderNumber || 
+                       (typeof selectedDeliveryForQR?.order === 'object' 
+                         ? selectedDeliveryForQR?.order?._id?.toString().slice(-6) 
+                         : selectedDeliveryForQR?.order?.toString().slice(-6)) || 'unknown';
+    const customerName = (selectedDeliveryForQR?.customerName || 'customer').replace(/[^a-zA-Z0-9]/g, '_');
+    const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    const filename = `comprehensive-delivery-qr_${orderNumber}_${deliveryId}_${customerName}_${timestamp}.png`;
+    
     // Create a download link for the QR code
     const link = document.createElement('a');
     link.href = qrCodeData;
-    link.download = 'delivery-qr-code.png';
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    console.log(`Downloaded QR code as: ${filename}`);
   };
   
+  // Utility function for status badge colors
+  const getStatusBadgeColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'pending': return 'warning';
+      case 'confirmed': return 'info';
+      case 'processing': return 'primary';
+      case 'ready': return 'success';
+      case 'out_for_delivery': case 'in_transit': return 'primary';
+      case 'delivered': return 'success';
+      case 'cancelled': case 'rejected': return 'danger';
+      case 'assigned': return 'secondary';
+      default: return 'secondary';
+    }
+  };
+
   const handleGenerateQRForDelivery = async (delivery) => {
     setModalLoading(true);
     try {
@@ -369,48 +402,130 @@ const OrderList = () => {
       if (!delivery.order) {
         throw new Error("Delivery has no associated order ID");
       }
+
+      // Validate order ID format (allow both ObjectId format and shorter order numbers)
+      const orderIdString = delivery.order.toString();
+      if (!orderIdString.match(/^[0-9a-fA-F]{24}$/) && !orderIdString.match(/^[0-9a-fA-F]{6,}$/)) {
+        console.warn("Invalid order ID format:", delivery.order);
+        // Instead of throwing error, let's try to proceed with the ID we have
+        console.log("Attempting to proceed with order ID:", delivery.order);
+      }
       
       // Fetch the related order to get all necessary details
       console.log("Fetching order with ID:", delivery.order);
-      const orderResponse = await orderAPI.getById(delivery.order);
-      const orderData = orderResponse.data;
-      console.log("Retrieved order data:", orderData);
+      let orderData;
+      try {
+        const orderResponse = await orderAPI.getById(delivery.order);
+        orderData = orderResponse.data;
+        console.log("Retrieved order data:", orderData);
+      } catch (orderError) {
+        console.error("Failed to fetch order:", orderError);
+        throw new Error(`Failed to fetch order details: ${orderError.response?.data?.message || orderError.message}`);
+      }
       
       // Fetch the delivery person details if needed
       let deliveryPersonData = null;
       if (delivery.deliveryPerson) {
         try {
-          console.log("Fetching delivery person with ID:", delivery.deliveryPerson);
-          const personResponse = await userAPI.getById(delivery.deliveryPerson);
-          deliveryPersonData = personResponse.data;
-          console.log("Retrieved delivery person data:", deliveryPersonData);
+          // Validate delivery person ID format (allow both ObjectId format and shorter IDs)
+          const deliveryPersonIdString = delivery.deliveryPerson.toString();
+          if (deliveryPersonIdString.match(/^[0-9a-fA-F]{24}$/) || deliveryPersonIdString.match(/^[0-9a-fA-F]{6,}$/)) {
+            console.log("Fetching delivery person with ID:", delivery.deliveryPerson);
+            const personResponse = await userAPI.getById(delivery.deliveryPerson);
+            deliveryPersonData = personResponse.data;
+            console.log("Retrieved delivery person data:", deliveryPersonData);
+          } else {
+            console.warn("Invalid delivery person ID format:", delivery.deliveryPerson);
+          }
         } catch (err) {
           console.error('Failed to fetch delivery person details:', err);
+          // Don't throw error for delivery person fetch failure, just continue without it
         }
       }
       
-      // Generate QR code data for the delivery
+      // Generate comprehensive QR code data for the delivery
       const qrDataObj = {
-        orderId: orderData._id || orderData.id,
-        orderNumber: orderData.orderNumber || orderData._id?.toString().slice(-6),
-        deliveryId: delivery._id,
-        deliveryPerson: deliveryPersonData ? {
-          id: deliveryPersonData._id,
-          name: deliveryPersonData.name,
-          phone: deliveryPersonData.phone
-        } : {
-          id: delivery.deliveryPerson,
-          name: "Unknown"
+        // Delivery Information
+        delivery: {
+          id: delivery._id?.toString() || '',
+          status: delivery.status || 'unknown',
+          assignedDate: delivery.assignedAt || delivery.createdAt || new Date().toISOString(),
+          deliveryDate: delivery.deliveryDate || '',
+          address: delivery.address || orderData.shippingAddress || orderData.address || 'Address not available',
+          notes: delivery.notes || '',
+          trackingNumber: delivery.trackingNumber || delivery._id?.toString().slice(-8).toUpperCase() || 'N/A'
         },
+        
+        // Order Information
+        order: {
+          id: (orderData._id || orderData.id)?.toString() || '',
+          orderNumber: orderData.orderNumber || (orderData._id || orderData.id)?.toString().slice(-6).toUpperCase() || 'N/A',
+          status: orderData.status || 'unknown',
+          totalAmount: (orderData.totalAmount || orderData.total || 0).toString(),
+          orderDate: orderData.createdAt || orderData.orderDate || new Date().toISOString(),
+          paymentMethod: orderData.paymentMethod || 'N/A',
+          paymentStatus: orderData.paymentStatus || 'pending',
+          items: (delivery.items || orderData.items || []).map(item => ({
+            productId: (item.product?._id || item.productId)?.toString() || '',
+            productName: item.product?.name || item.productName || item.name || 'Unknown Product',
+            quantity: parseInt(item.quantity) || 0,
+            price: parseFloat(item.price || item.product?.price || 0).toFixed(2),
+            total: (parseInt(item.quantity || 0) * parseFloat(item.price || item.product?.price || 0)).toFixed(2),
+            sku: item.product?.sku || item.sku || '',
+            category: item.product?.category || item.category || ''
+          })),
+          itemCount: (delivery.items || orderData.items || []).length,
+          totalItems: (delivery.items || orderData.items || []).reduce((sum, item) => sum + parseInt(item.quantity || 0), 0)
+        },
+        
+        // Customer Information
         customer: {
-          name: delivery.customerName || orderData.customerName || orderData.customer?.name,
-          address: delivery.address || orderData.shippingAddress || orderData.address
+          id: (orderData.customer?._id || orderData.customerId)?.toString() || '',
+          name: delivery.customerName || orderData.customerName || orderData.customer?.name || 'Unknown Customer',
+          email: orderData.customer?.email || orderData.customerEmail || '',
+          phone: orderData.customer?.phone || orderData.customerPhone || '',
+          address: {
+            shipping: delivery.address || orderData.shippingAddress || orderData.address || 'Address not available',
+            billing: orderData.billingAddress || orderData.address || 'Same as shipping'
+          }
         },
-        items: delivery.items || orderData.items,
-        timestamp: new Date().toISOString()
+        
+        // Delivery Person Information
+        deliveryPerson: deliveryPersonData ? {
+          id: deliveryPersonData._id?.toString() || '',
+          name: deliveryPersonData.name || 'Unknown',
+          phone: deliveryPersonData.phone || 'N/A',
+          email: deliveryPersonData.email || 'N/A',
+          employeeId: deliveryPersonData.employeeId || 'N/A',
+          department: deliveryPersonData.department || 'Delivery'
+        } : {
+          id: (delivery.deliveryPerson)?.toString() || '',
+          name: delivery.deliveryPersonName || "Unassigned",
+          phone: "N/A",
+          email: "N/A",
+          status: "unassigned"
+        },
+        
+        // System Information
+        system: {
+          generatedAt: new Date().toISOString(),
+          generatedBy: 'Order Management System',
+          version: '1.0',
+          qrType: 'DELIVERY_ORDER',
+          validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // Valid for 30 days
+        },
+        
+        // Instructions for delivery
+        instructions: {
+          deliveryInstructions: orderData.deliveryInstructions || delivery.specialInstructions || '',
+          contactCustomer: 'Call customer 15 minutes before delivery',
+          verificationRequired: true,
+          signatureRequired: parseFloat(orderData.totalAmount || orderData.total || 0) > 100,
+          photoRequired: true
+        }
       };
       
-      console.log("QR data object:", qrDataObj);
+      console.log("Comprehensive QR data object:", qrDataObj);
       const qrData = JSON.stringify(qrDataObj);
       
       // Generate QR code image
@@ -429,7 +544,79 @@ const OrderList = () => {
       }
     } catch (error) {
       console.error('Failed to generate QR code for delivery:', error);
-      alert(`Error generating QR code: ${error.message || 'Unknown error'}`);
+      
+      // Fallback: Generate QR code with comprehensive delivery data we have
+      try {
+        console.log("Attempting fallback QR generation with comprehensive available data");
+        const fallbackQrDataObj = {
+          // Delivery Information
+          delivery: {
+            id: delivery._id?.toString() || '',
+            status: delivery.status || 'unknown',
+            address: delivery.address || 'Address not available',
+            trackingNumber: delivery._id?.toString().slice(-8).toUpperCase() || 'N/A',
+            assignedDate: delivery.createdAt || new Date().toISOString()
+          },
+          
+          // Order Information
+          order: {
+            id: (delivery.order)?.toString() || '',
+            orderNumber: delivery.orderNumber || (delivery.order)?.toString().slice(-6).toUpperCase() || 'Unknown',
+            status: delivery.orderStatus || 'unknown',
+            items: (delivery.items || []).map(item => ({
+              productName: item.product?.name || item.productName || item.name || 'Unknown Product',
+              quantity: parseInt(item.quantity) || 0,
+              price: parseFloat(item.price || item.product?.price || 0).toFixed(2)
+            })),
+            itemCount: (delivery.items || []).length
+          },
+          
+          // Customer Information
+          customer: {
+            name: delivery.customerName || 'Unknown Customer',
+            address: delivery.address || 'Address not available'
+          },
+          
+          // Delivery Person Information
+          deliveryPerson: {
+            id: (delivery.deliveryPerson)?.toString() || 'unassigned',
+            name: delivery.deliveryPersonName || 'Unassigned',
+            phone: 'Contact admin for details'
+          },
+          
+          // System Information
+          system: {
+            generatedAt: new Date().toISOString(),
+            qrType: 'DELIVERY_ORDER_FALLBACK',
+            note: 'Generated with limited data - some details may be incomplete',
+            dataSource: 'delivery_record_only'
+          },
+          
+          // Instructions
+          instructions: {
+            note: 'Contact system administrator for complete order details',
+            verificationRequired: true
+          }
+        };
+        
+        console.log("Comprehensive fallback QR data object:", fallbackQrDataObj);
+        const fallbackQrData = JSON.stringify(fallbackQrDataObj);
+        
+        const qrCodeImage = await QRCodeService.generateQRCode(fallbackQrData);
+        console.log("Fallback QR code generated successfully");
+        setQRCodeData(qrCodeImage);
+        setSelectedDeliveryForQR(delivery);
+        
+        // Show QR code modal
+        setDeliveryConfirmed(delivery.status === 'in_transit');
+        setShowQRModal(true);
+        
+        // Show a warning about limited data
+        alert("QR code generated with limited data due to API issues. Some details may be missing.");
+      } catch (fallbackError) {
+        console.error('Fallback QR generation also failed:', fallbackError);
+        alert(`Error generating QR code: ${error.message || 'Unknown error'}. Fallback also failed.`);
+      }
     } finally {
       setModalLoading(false);
     }
@@ -817,90 +1004,189 @@ const OrderList = () => {
         </Modal.Body>
       </Modal>
       
-      {/* QR Code Modal */}
-      <Modal show={showQRModal} onHide={() => setShowQRModal(false)}>
+      {/* Enhanced QR Code Modal with Comprehensive Details */}
+      <Modal show={showQRModal} onHide={() => setShowQRModal(false)} size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Delivery QR Code</Modal.Title>
+          <Modal.Title>
+            <i className="bi bi-qr-code me-2"></i>
+            Comprehensive Delivery QR Code
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <div className="text-center mb-3">
-            <p className="mb-3">
-              Scan this QR code to verify delivery details. 
-              Share this with the delivery person.
-            </p>
+          <div className="row">
+            {/* QR Code Section */}
+            <div className="col-md-5">
+              <div className="text-center">
+                <h6 className="mb-3">QR Code</h6>
+                {qrCodeData ? (
+                  <div className="border p-3 mb-3 rounded bg-light">
+                    <Image 
+                      src={qrCodeData} 
+                      alt="Comprehensive Delivery QR Code" 
+                      className="img-fluid mb-2" 
+                      style={{ maxWidth: '250px', minHeight: '250px' }} 
+                    />
+                    <p className="mb-0 text-muted">
+                      <small>
+                        <i className="bi bi-shield-check me-1"></i>
+                        Contains complete order & delivery details
+                      </small>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="d-flex justify-content-center my-5">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Generating QR Code...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
             
-            {qrCodeData ? (
-              <div className="border p-3 mb-3 rounded">
-                <Image 
-                  src={qrCodeData} 
-                  alt="Delivery QR Code" 
-                  className="img-fluid mb-3" 
-                  style={{ maxWidth: '300px' }} 
-                />
-                <p className="mb-0"><small>QR code contains encrypted delivery details</small></p>
+            {/* Comprehensive Details Section */}
+            <div className="col-md-7">
+              <div className="h-100" style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 
-                {/* Display delivery information */}
-                <div className="mt-3 text-start">
-                  <h6 className="border-bottom pb-2 mb-2">Delivery Information:</h6>
-                  
-                  {/* Show delivery person if available from either source */}
-                  {((currentOrderForDelivery && currentOrderForDelivery.deliveryPerson) || selectedDeliveryForQR) && (
-                    <>
-                      <p className="mb-1">
-                        <strong>Delivery Person:</strong> {
-                          selectedDeliveryForQR && selectedDeliveryForQR.deliveryPersonName ? 
-                            selectedDeliveryForQR.deliveryPersonName :
-                          currentOrderForDelivery && currentOrderForDelivery.deliveryPerson && currentOrderForDelivery.deliveryPerson.name ?
-                            currentOrderForDelivery.deliveryPerson.name :
-                            'Assigned'
-                        }
+                {/* Order Information */}
+                {selectedDeliveryForQR && (
+                  <div className="mb-4">
+                    <h6 className="text-primary border-bottom pb-2 mb-3">
+                      <i className="bi bi-cart3 me-2"></i>Order Details
+                    </h6>
+                    <div className="row">
+                      <div className="col-6">
+                        <p className="mb-1"><strong>Order ID:</strong></p>
+                        <p className="text-muted small mb-2">
+                          {typeof selectedDeliveryForQR.order === 'object' 
+                            ? selectedDeliveryForQR.order?._id || selectedDeliveryForQR.order?.id || 'N/A'
+                            : selectedDeliveryForQR.order?.toString() || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="col-6">
+                        <p className="mb-1"><strong>Delivery ID:</strong></p>
+                        <p className="text-muted small mb-2">
+                          {selectedDeliveryForQR._id?.toString() || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mb-1"><strong>Status:</strong> 
+                      <span className={`badge ms-2 bg-${getStatusBadgeColor(selectedDeliveryForQR.status)}`}>
+                        {selectedDeliveryForQR.status || 'Unknown'}
+                      </span>
+                    </p>
+                    {selectedDeliveryForQR.totalAmount && (
+                      <p className="mb-1"><strong>Total Amount:</strong> 
+                        <span className="text-success fw-bold ms-2">
+                          ${typeof selectedDeliveryForQR.totalAmount === 'object' 
+                            ? selectedDeliveryForQR.totalAmount.toString() 
+                            : selectedDeliveryForQR.totalAmount}
+                        </span>
                       </p>
-                      
-                      {/* Phone if available */}
-                      {(currentOrderForDelivery && currentOrderForDelivery.deliveryPerson && currentOrderForDelivery.deliveryPerson.phone) && (
-                        <p className="mb-1">
-                          <strong>Contact:</strong> {currentOrderForDelivery.deliveryPerson.phone}
+                    )}
+                  </div>
+                )}
+
+                {/* Customer Information */}
+                {selectedDeliveryForQR && (
+                  <div className="mb-4">
+                    <h6 className="text-success border-bottom pb-2 mb-3">
+                      <i className="bi bi-person me-2"></i>Customer Information
+                    </h6>
+                    <p className="mb-1"><strong>Name:</strong> {selectedDeliveryForQR.customerName || 'N/A'}</p>
+                    <p className="mb-1"><strong>Delivery Address:</strong></p>
+                    <p className="text-muted small mb-2">{selectedDeliveryForQR.address || 'Address not available'}</p>
+                  </div>
+                )}
+
+                {/* Delivery Person Information */}
+                <div className="mb-4">
+                  <h6 className="text-warning border-bottom pb-2 mb-3">
+                    <i className="bi bi-truck me-2"></i>Delivery Personnel
+                  </h6>
+                  {selectedDeliveryForQR && selectedDeliveryForQR.deliveryPersonName ? (
+                    <>
+                      <p className="mb-1"><strong>Name:</strong> {selectedDeliveryForQR.deliveryPersonName}</p>
+                      <p className="mb-1"><strong>ID:</strong> 
+                        {typeof selectedDeliveryForQR.deliveryPerson === 'object' 
+                          ? selectedDeliveryForQR.deliveryPerson?._id?.toString() || selectedDeliveryForQR.deliveryPerson?.id?.toString() || 'N/A'
+                          : selectedDeliveryForQR.deliveryPerson?.toString() || 'N/A'}
+                      </p>
+                    </>
+                  ) : currentOrderForDelivery && currentOrderForDelivery.deliveryPerson ? (
+                    <>
+                      <p className="mb-1"><strong>Name:</strong> {currentOrderForDelivery.deliveryPerson.name || 'N/A'}</p>
+                      <p className="mb-1"><strong>Contact:</strong> {currentOrderForDelivery.deliveryPerson.phone || 'N/A'}</p>
+                      <p className="mb-1"><strong>ID:</strong> 
+                        {typeof currentOrderForDelivery.deliveryPerson._id === 'object' 
+                          ? currentOrderForDelivery.deliveryPerson._id?.toString() || 'N/A'
+                          : currentOrderForDelivery.deliveryPerson._id?.toString() || 'N/A'}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-muted">No delivery person assigned yet</p>
+                  )}
+                </div>
+
+                {/* Items Information */}
+                {(selectedDeliveryForQR?.items || currentOrderForDelivery?.items) && (
+                  <div className="mb-4">
+                    <h6 className="text-info border-bottom pb-2 mb-3">
+                      <i className="bi bi-box-seam me-2"></i>Items ({(selectedDeliveryForQR?.items || currentOrderForDelivery?.items || []).length})
+                    </h6>
+                    <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
+                      {(selectedDeliveryForQR?.items || currentOrderForDelivery?.items || []).slice(0, 5).map((item, index) => {
+                        const productName = item.product?.name || item.productName || item.name || 'Unknown Product';
+                        const quantity = item.quantity || 0;
+                        const price = item.price || item.product?.price || 0;
+                        const total = (quantity * price).toFixed(2);
+                        
+                        return (
+                          <div key={index} className="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded">
+                            <div>
+                              <small className="fw-bold">{productName}</small>
+                              <div className="text-muted" style={{ fontSize: '0.75em' }}>
+                                Qty: {quantity} × ${price}
+                              </div>
+                            </div>
+                            <small className="text-success fw-bold">
+                              ${total}
+                            </small>
+                          </div>
+                        );
+                      })}
+                      {(selectedDeliveryForQR?.items || currentOrderForDelivery?.items || []).length > 5 && (
+                        <p className="text-muted text-center mb-0">
+                          <small>+ {(selectedDeliveryForQR?.items || currentOrderForDelivery?.items || []).length - 5} more items</small>
                         </p>
                       )}
-                    </>
-                  )}
-                  
-                  {/* Status information */}
-                  <p className="mb-1">
-                    <strong>Status:</strong> {
-                      deliveryConfirmed ? 'In Transit' :
-                      selectedDeliveryForQR ? selectedDeliveryForQR.status : 'Assigned'
-                    }
-                  </p>
-                  
-                  {/* Customer information if available */}
-                  {((currentOrderForDelivery && currentOrderForDelivery.customerName) || 
-                    (selectedDeliveryForQR && selectedDeliveryForQR.customerName)) && (
-                    <p className="mb-1">
-                      <strong>Customer:</strong> {
-                        selectedDeliveryForQR ? selectedDeliveryForQR.customerName :
-                        currentOrderForDelivery ? currentOrderForDelivery.customerName : 'N/A'
-                      }
-                    </p>
-                  )}
+                    </div>
+                  </div>
+                )}
+
+                {/* QR Code Information */}
+                <div className="mb-3">
+                  <h6 className="text-secondary border-bottom pb-2 mb-3">
+                    <i className="bi bi-info-circle me-2"></i>QR Code Information
+                  </h6>
+                  <p className="mb-1"><small><strong>Generated:</strong> {new Date().toLocaleString()}</small></p>
+                  <p className="mb-1"><small><strong>Valid Until:</strong> {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</small></p>
+                  <p className="mb-0"><small><strong>Type:</strong> Comprehensive Delivery Order</small></p>
                 </div>
               </div>
-            ) : (
-              <div className="d-flex justify-content-center my-5">
-                <div className="spinner-border text-primary" role="status">
-                  <span className="visually-hidden">Loading...</span>
-                </div>
-              </div>
-            )}
-            
+            </div>
+          </div>
+          
+          {/* Status Alert */}
+          <div className="mt-3">
             {!deliveryConfirmed ? (
-              <div className="alert alert-info">
-                <strong>Next step:</strong> Confirm the delivery to update status to "Delivering" 
+              <div className="alert alert-info mb-0">
+                <i className="bi bi-info-circle me-2"></i>
+                <strong>Next Step:</strong> Confirm the delivery to update status to "In Transit"
               </div>
             ) : (
-              <div className="alert alert-success">
+              <div className="alert alert-success mb-0">
                 <i className="bi bi-check-circle me-2"></i>
-                Delivery confirmed! Status updated to "Delivering"
+                <strong>Confirmed!</strong> Delivery status updated to "In Transit"
               </div>
             )}
           </div>

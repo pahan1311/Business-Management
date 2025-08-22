@@ -38,9 +38,28 @@ exports.getOrders = async (req, res) => {
 // Get order by ID
 exports.getOrderById = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id)
-      .populate('customer', 'name email phone')
-      .populate('items.product');
+    const { id } = req.params;
+    
+    let order;
+    
+    // Check if it's a valid MongoDB ObjectId format
+    if (id.match(/^[0-9a-fA-F]{24}$/)) {
+      // It's a full ObjectId
+      order = await Order.findById(id)
+        .populate('customer', 'name email phone')
+        .populate('items.product');
+    } else {
+      // Try to find by order number or other identifier
+      order = await Order.findOne({
+        $or: [
+          { orderNumber: id },
+          { _id: id }, // In case it's still a valid ObjectId
+          { orderNumber: { $regex: id, $options: 'i' } } // Case insensitive partial match
+        ]
+      })
+        .populate('customer', 'name email phone')
+        .populate('items.product');
+    }
     
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });

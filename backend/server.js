@@ -28,7 +28,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/staff', staffRoutes);
-app.use('/api/qrcode', qrCodeRoutes);
+app.use('/api/qr-code', qrCodeRoutes); // Changed from /qrcode to /qr-code to match frontend
 
 // Register users API routes
 console.log('Registering users API routes...');

@@ -2,8 +2,12 @@
 const express = require('express');
 const router = express.Router();
 const qrCodeController = require('../controllers/qrCodeController');
+const { protect } = require('../middleware/auth');
 
-// Define routes here
-// router.post('/generate', qrCodeController.generateQRCode);
+// Generate QR code
+router.post('/generate', protect, qrCodeController.generateQRCode);
+
+// Lookup delivery/order info from QR code data
+router.get('/lookup/:data', protect, qrCodeController.lookupQRCode);
 
 module.exports = router;
