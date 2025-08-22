@@ -85,7 +85,19 @@ export const useCrud = (apiService) => {
   const fetchAll = async (params = {}) => {
     const result = await handleApiCall(() => apiService.getAll(params));
     if (result.success) {
-      setItems(result.data);
+      // Handle both array responses and paginated responses
+      if (Array.isArray(result.data)) {
+        setItems(result.data);
+      } else if (result.data && result.data.items) {
+        // Handle paginated response where items are in an 'items' property
+        setItems(result.data.items);
+      } else if (result.data && result.data.length === undefined) {
+        // For any other object type response, convert to array with the object as the only item
+        setItems([result.data]);
+      } else {
+        // Fallback
+        setItems(result.data || []);
+      }
     }
     return result;
   };

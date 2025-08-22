@@ -58,6 +58,8 @@ export const customerAPI = {
 // Product/Inventory APIs
 export const inventoryAPI = {
   getAll: (params = {}) => api.get('/inventory', { params }),
+  getPublicProducts: (params = {}) => api.get('/inventory/products', { params }),
+  getCategories: () => api.get('/inventory/categories'),
   getById: (id) => api.get(`/inventory/${id}`),
   create: (product) => api.post('/inventory', product),
   update: (id, product) => api.put(`/inventory/${id}`, product),
@@ -74,7 +76,8 @@ export const orderAPI = {
   update: (id, order) => api.put(`/orders/${id}`, order),
   updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }),
   delete: (id) => api.delete(`/orders/${id}`),
-  getByCustomer: (customerId) => api.get(`/orders/customer/${customerId}`)
+  getByCustomer: (customerId) => api.get(`/orders/customer/${customerId}`),
+  assignStaff: (id, staffId) => api.patch(`/orders/${id}/assign`, { staffId })
 };
 
 // Delivery APIs
@@ -93,6 +96,7 @@ export const deliveryAPI = {
 // Staff APIs
 export const staffAPI = {
   getAll: (params = {}) => api.get('/staff', { params }),
+  getAvailable: () => api.get('/staff/available'),
   getById: (id) => api.get(`/staff/${id}`),
   create: (staff) => api.post('/staff', staff),
   update: (id, staff) => api.put(`/staff/${id}`, staff),

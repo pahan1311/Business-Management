@@ -179,7 +179,14 @@ const DeliveryDashboard = () => {
                           <td>#{delivery.orderId}</td>
                           <td>{delivery.customerName}</td>
                           <td>
-                            <small>{delivery.address}</small>
+                            <small>
+                              {typeof delivery.address === 'object' 
+                                ? `${delivery.address.street || ''}, 
+                                   ${delivery.address.city || ''}, 
+                                   ${delivery.address.state || ''} 
+                                   ${delivery.address.zip || ''}`
+                                : delivery.address}
+                            </small>
                           </td>
                           <td>
                             <StatusBadge status={delivery.status} />

@@ -249,7 +249,15 @@ const QRCodeScanner = () => {
                   {orderDetails.deliveryAddress && (
                     <div className="mt-3">
                       <h6>Delivery Address</h6>
-                      <p className="mb-0">{orderDetails.deliveryAddress}</p>
+                      <p className="mb-0">
+                        {typeof orderDetails.deliveryAddress === 'object' 
+                          ? `${orderDetails.deliveryAddress.street || ''}, 
+                             ${orderDetails.deliveryAddress.city || ''}, 
+                             ${orderDetails.deliveryAddress.state || ''} 
+                             ${orderDetails.deliveryAddress.zip || ''}, 
+                             ${orderDetails.deliveryAddress.country || ''}`
+                          : orderDetails.deliveryAddress}
+                      </p>
                     </div>
                   )}
                 </div>

@@ -34,7 +34,11 @@ const InventoryList = () => {
     fetchAll();
   }, []);
 
-  const filteredInventory = inventory.filter(item =>
+  // Ensure inventory is an array before filtering
+  const inventoryArray = Array.isArray(inventory) ? inventory : 
+                       (inventory && inventory.items ? inventory.items : []);
+  
+  const filteredInventory = inventoryArray.filter(item =>
     item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.category?.toLowerCase().includes(searchTerm.toLowerCase())
   );

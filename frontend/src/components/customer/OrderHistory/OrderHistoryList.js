@@ -239,7 +239,15 @@ const OrderHistoryList = () => {
                 {selectedOrder.deliveryAddress && (
                   <div className="mb-3">
                     <h6>Delivery Address</h6>
-                    <p className="text-muted small">{selectedOrder.deliveryAddress}</p>
+                    <p className="text-muted small">
+                      {typeof selectedOrder.deliveryAddress === 'object' 
+                        ? `${selectedOrder.deliveryAddress.street || ''}, 
+                           ${selectedOrder.deliveryAddress.city || ''}, 
+                           ${selectedOrder.deliveryAddress.state || ''} 
+                           ${selectedOrder.deliveryAddress.zip || ''}, 
+                           ${selectedOrder.deliveryAddress.country || ''}`
+                        : selectedOrder.deliveryAddress}
+                    </p>
                   </div>
                 )}
 

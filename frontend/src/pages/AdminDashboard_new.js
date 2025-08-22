@@ -30,62 +30,20 @@ const AdminDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      // Use individual try/catch blocks for each API call
-      let ordersRes = { data: [] };
-      let customersRes = { data: [] };
-      let inventoryRes = { data: [] };
-      let deliveriesRes = { data: [] };
-      
-      try {
-        ordersRes = await orderAPI.getAll({ limit: 5 });
-      } catch (err) {
-        console.error('Error fetching orders:', err);
-      }
-      
-      try {
-        customersRes = await customerAPI.getAll();
-      } catch (err) {
-        console.error('Error fetching customers:', err);
-      }
-      
-      try {
-        inventoryRes = await inventoryAPI.getLowStock();
-      } catch (err) {
-        console.error('Error fetching inventory:', err);
-      }
-      
-      try {
-        deliveriesRes = await deliveryAPI.getAll({ status: 'pending' });
-      } catch (err) {
-        console.error('Error fetching deliveries:', err);
-      }
-
-      // Handle various response formats
-      const ordersData = ordersRes.data || {};
-      const customersData = customersRes.data || [];
-      const inventoryData = inventoryRes.data || [];
-      const deliveriesData = deliveriesRes.data || [];
-      
-      // Calculate counts safely
-      const orderCount = ordersData.total || (Array.isArray(ordersData) ? ordersData.length : 0);
-      const customerCount = Array.isArray(customersData) ? customersData.length : 0;
-      const productCount = Array.isArray(inventoryData) ? inventoryData.length : 0;
-      const deliveryCount = Array.isArray(deliveriesData) ? deliveriesData.length : 0;
-      
-      // Get recent orders safely
-      const recentOrders = ordersData.orders || 
-                         (Array.isArray(ordersData) ? ordersData.slice(0, 5) : []);
-      
-      // Get low stock items safely
-      const lowStock = Array.isArray(inventoryData) ? inventoryData.slice(0, 5) : [];
+      const [ordersRes, customersRes, inventoryRes, deliveriesRes] = await Promise.all([
+        orderAPI.getAll({ limit: 5 }),
+        customerAPI.getAll(),
+        inventoryAPI.getLowStock(),
+        deliveryAPI.getAll({ status: 'pending' })
+      ]);
 
       setStats({
-        totalOrders: orderCount,
-        totalCustomers: customerCount,
-        totalProducts: productCount,
-        pendingDeliveries: deliveryCount,
-        recentOrders: recentOrders,
-        lowStockItems: lowStock
+        totalOrders: ordersRes.data.total || ordersRes.data.length,
+        totalCustomers: customersRes.data.length,
+        totalProducts: inventoryRes.data.length,
+        pendingDeliveries: deliveriesRes.data.length,
+        recentOrders: ordersRes.data.orders || ordersRes.data.slice(0, 5),
+        lowStockItems: inventoryRes.data.slice(0, 5)
       });
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);

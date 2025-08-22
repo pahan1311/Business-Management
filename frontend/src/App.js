@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
+import { CartProvider } from './context/CartContext';
 import { useAuth } from './hooks/useAuth';
 
 // Components
@@ -218,7 +219,9 @@ function App() {
     <Router>
       <AuthProvider>
         <AppProvider>
-          <AppContent />
+          <CartProvider>
+            <AppContent />
+          </CartProvider>
         </AppProvider>
       </AuthProvider>
     </Router>

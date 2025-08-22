@@ -196,7 +196,14 @@ const CustomerList = () => {
                       <td>{customer.email}</td>
                       <td>{customer.phone || 'N/A'}</td>
                       <td>
-                        <small>{customer.address}</small>
+                        <small>
+                          {typeof customer.address === 'object' 
+                            ? `${customer.address.street || ''}, 
+                               ${customer.address.city || ''}, 
+                               ${customer.address.state || ''} 
+                               ${customer.address.zip || ''}`
+                            : customer.address}
+                        </small>
                       </td>
                       <td>{formatDate(customer.createdAt)}</td>
                       <td>

@@ -2,11 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { orderAPI } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import StatusBadge from '../components/common/StatusBadge';
-import LoadingSpinner from '../components/common/LoadingSpinner';
 import { formatCurrency, formatDate } from '../utils/helpers';
+import { Container, Row, Col, Card, Nav, Alert } from 'react-bootstrap';
+import ProductCatalog from '../components/customer/Products/ProductCatalog';
+import ShoppingCart from '../components/customer/Cart/ShoppingCart';
+import { useCart } from '../context/CartContext';
 
 const CustomerDashboard = () => {
   const { user } = useAuth();
+  const { items, updateQuantity, removeFromCart, clearCart } = useCart();
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState({
     totalOrders: 0,
@@ -14,19 +18,32 @@ const CustomerDashboard = () => {
     completedOrders: 0,
     totalSpent: 0
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('products');
 
   useEffect(() => {
-    if (user?.id) {
+    // Only fetch order data if user is logged in
+    if (user?._id) {
       fetchCustomerData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const fetchCustomerData = async () => {
     try {
       setLoading(true);
-      const response = await orderAPI.getByCustomer(user.id);
-      const customerOrders = response.data;
+      
+      if (!user?._id) {
+        return; // Don't proceed if there's no user ID
+      }
+      
+      const response = await orderAPI.getByCustomer(user._id);
+      
+      // Handle different response structures safely
+      const customerOrders = Array.isArray(response.data) 
+        ? response.data 
+        : response.data?.orders || [];
       
       setOrders(customerOrders.slice(0, 5)); // Show only recent 5 orders
 
@@ -38,7 +55,7 @@ const CustomerDashboard = () => {
       const completedOrders = customerOrders.filter(order => 
         order.status === 'delivered'
       ).length;
-      const totalSpent = customerOrders.reduce((sum, order) => sum + order.total, 0);
+      const totalSpent = customerOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
 
       setStats({
         totalOrders,
@@ -48,36 +65,63 @@ const CustomerDashboard = () => {
       });
     } catch (error) {
       console.error('Failed to fetch customer data:', error);
+      // Show empty state when there's an error
+      setOrders([]);
+      setStats({
+        totalOrders: 0,
+        pendingOrders: 0,
+        completedOrders: 0,
+        totalSpent: 0
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return <LoadingSpinner text="Loading your dashboard..." />;
+  // Show a welcome message if no user data is available
+  if (!user || !user._id) {
+    return (
+      <Container fluid className="py-4">
+        <div className="text-center">
+          <h3>Welcome to the Customer Dashboard</h3>
+          <p>Please log in to view your personalized dashboard.</p>
+        </div>
+      </Container>
+    );
+  }
+  
+  // Display error message if there's an error
+  if (error) {
+    return (
+      <Container fluid className="py-4">
+        <Alert variant="danger">
+          {error}
+        </Alert>
+      </Container>
+    );
   }
 
   return (
-    <div className="container-fluid py-4">
+    <Container fluid className="py-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h1>Welcome back, {user?.name || user?.email}</h1>
-          <p className="text-muted mb-0">Here's what's happening with your orders</p>
+          <p className="text-muted mb-0">Browse our products and place your order</p>
         </div>
         <button 
           className="btn btn-outline-primary"
           onClick={fetchCustomerData}
         >
           <i className="bi bi-arrow-clockwise me-2"></i>
-          Refresh
+          Refresh Orders
         </button>
       </div>
 
       {/* Stats Cards */}
-      <div className="row g-4 mb-4">
-        <div className="col-md-3">
-          <div className="card bg-primary text-white">
-            <div className="card-body">
+      <Row className="g-4 mb-4">
+        <Col md={3}>
+          <Card className="bg-primary text-white h-100">
+            <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
                 <div>
                   <h6 className="card-title mb-0">Total Orders</h6>
@@ -85,13 +129,13 @@ const CustomerDashboard = () => {
                 </div>
                 <i className="bi bi-cart fs-1 opacity-50"></i>
               </div>
-            </div>
-          </div>
-        </div>
+            </Card.Body>
+          </Card>
+        </Col>
 
-        <div className="col-md-3">
-          <div className="card bg-warning text-white">
-            <div className="card-body">
+        <Col md={3}>
+          <Card className="bg-warning text-white h-100">
+            <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
                 <div>
                   <h6 className="card-title mb-0">Pending Orders</h6>
@@ -99,27 +143,27 @@ const CustomerDashboard = () => {
                 </div>
                 <i className="bi bi-clock fs-1 opacity-50"></i>
               </div>
-            </div>
-          </div>
-        </div>
+            </Card.Body>
+          </Card>
+        </Col>
 
-        <div className="col-md-3">
-          <div className="card bg-success text-white">
-            <div className="card-body">
+        <Col md={3}>
+          <Card className="bg-success text-white h-100">
+            <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
                 <div>
                   <h6 className="card-title mb-0">Completed Orders</h6>
                   <h2 className="mb-0">{stats.completedOrders}</h2>
                 </div>
-                <i className="bi bi-check-circle fs-1 opacity-50"></i>
+                <i className="bi bi-check2-circle fs-1 opacity-50"></i>
               </div>
-            </div>
-          </div>
-        </div>
+            </Card.Body>
+          </Card>
+        </Col>
 
-        <div className="col-md-3">
-          <div className="card bg-info text-white">
-            <div className="card-body">
+        <Col md={3}>
+          <Card className="bg-info text-white h-100">
+            <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
                 <div>
                   <h6 className="card-title mb-0">Total Spent</h6>
@@ -127,117 +171,119 @@ const CustomerDashboard = () => {
                 </div>
                 <i className="bi bi-currency-dollar fs-1 opacity-50"></i>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
 
-      <div className="row g-4">
-        {/* Recent Orders */}
-        <div className="col-md-8">
-          <div className="card">
-            <div className="card-header d-flex justify-content-between align-items-center">
-              <h5 className="mb-0">Recent Orders</h5>
-              <a href="/customer/orders" className="btn btn-sm btn-outline-primary">
-                View All Orders
-              </a>
-            </div>
-            <div className="card-body">
-              {orders.length === 0 ? (
-                <div className="text-center text-muted py-4">
-                  <i className="bi bi-cart-x fs-1 d-block mb-2"></i>
-                  <p className="mb-0">No orders yet</p>
-                  <small>Start shopping to see your orders here!</small>
+      {/* Main Content with Tabs */}
+      <Row className="mt-4">
+        <Col lg={8} className="mb-4 mb-lg-0">
+          <Card className="h-100">
+            <Card.Header>
+              <Nav variant="tabs" className="border-bottom-0">
+                <Nav.Item>
+                  <Nav.Link 
+                    active={activeTab === 'products'} 
+                    onClick={() => setActiveTab('products')}
+                    className="border-0"
+                  >
+                    <i className="bi bi-grid me-2"></i>
+                    Products
+                  </Nav.Link>
+                </Nav.Item>
+                <Nav.Item>
+                  <Nav.Link 
+                    active={activeTab === 'orders'} 
+                    onClick={() => setActiveTab('orders')}
+                    className="border-0"
+                  >
+                    <i className="bi bi-list-check me-2"></i>
+                    My Orders
+                  </Nav.Link>
+                </Nav.Item>
+              </Nav>
+            </Card.Header>
+            <Card.Body className="p-0">
+              {activeTab === 'products' ? (
+                <div className="p-3">
+                  <ProductCatalog />
                 </div>
               ) : (
-                <div className="table-responsive">
-                  <table className="table table-hover">
-                    <thead>
-                      <tr>
-                        <th>Order ID</th>
-                        <th>Status</th>
-                        <th>Total</th>
-                        <th>Date</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orders.map(order => (
-                        <tr key={order.id}>
-                          <td>#{order.id}</td>
-                          <td>
-                            <StatusBadge status={order.status} />
-                          </td>
-                          <td>{formatCurrency(order.total)}</td>
-                          <td>{formatDate(order.createdAt)}</td>
-                          <td>
-                            <button className="btn btn-sm btn-outline-primary">
-                              View Details
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="p-3">
+                  {loading ? (
+                    <div className="text-center py-5">
+                      <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </div>
+                      <p className="mt-3">Loading your orders...</p>
+                    </div>
+                  ) : orders.length === 0 ? (
+                    <div className="text-center py-5">
+                      <i className="bi bi-receipt fs-1 text-muted mb-3"></i>
+                      <h4>No Orders Yet</h4>
+                      <p className="text-muted">
+                        You haven't placed any orders yet. Start shopping now!
+                      </p>
+                      <button 
+                        className="btn btn-primary mt-2" 
+                        onClick={() => setActiveTab('products')}
+                      >
+                        Browse Products
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table table-hover align-middle">
+                        <thead>
+                          <tr>
+                            <th>Order #</th>
+                            <th>Date</th>
+                            <th>Items</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {orders.map(order => (
+                            <tr key={order._id}>
+                              <td>
+                                <span className="fw-bold">#{order._id.slice(-6)}</span>
+                              </td>
+                              <td>{formatDate(order.createdAt)}</td>
+                              <td>{order.items.length}</td>
+                              <td>{formatCurrency(order.totalAmount)}</td>
+                              <td>
+                                <StatusBadge status={order.status} />
+                              </td>
+                              <td>
+                                <button className="btn btn-sm btn-outline-primary">
+                                  View Details
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="col-md-4">
-          <div className="card">
-            <div className="card-header">
-              <h5 className="mb-0">Quick Actions</h5>
-            </div>
-            <div className="card-body">
-              <div className="d-grid gap-2">
-                <a href="/customer/qr-scanner" className="btn btn-primary">
-                  <i className="bi bi-qr-code me-2"></i>
-                  Scan QR Code
-                </a>
-                <a href="/customer/orders" className="btn btn-outline-primary">
-                  <i className="bi bi-cart me-2"></i>
-                  View All Orders
-                </a>
-                <a href="/customer/inquiries" className="btn btn-outline-secondary">
-                  <i className="bi bi-chat me-2"></i>
-                  Submit Inquiry
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Order Status Guide */}
-          <div className="card mt-3">
-            <div className="card-header">
-              <h6 className="mb-0">Order Status Guide</h6>
-            </div>
-            <div className="card-body">
-              <div className="small">
-                <div className="d-flex align-items-center mb-2">
-                  <StatusBadge status="pending" className="me-2" />
-                  <span>Order received and being processed</span>
-                </div>
-                <div className="d-flex align-items-center mb-2">
-                  <StatusBadge status="confirmed" className="me-2" />
-                  <span>Order confirmed and being prepared</span>
-                </div>
-                <div className="d-flex align-items-center mb-2">
-                  <StatusBadge status="out_for_delivery" className="me-2" />
-                  <span>Order is on the way to you</span>
-                </div>
-                <div className="d-flex align-items-center">
-                  <StatusBadge status="delivered" className="me-2" />
-                  <span>Order successfully delivered</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+            </Card.Body>
+          </Card>
+        </Col>
+        
+        <Col lg={4}>
+          <ShoppingCart 
+            cartItems={items} 
+            updateQuantity={updateQuantity}
+            removeFromCart={removeFromCart}
+            clearCart={clearCart}
+          />
+        </Col>
+      </Row>
+    </Container>
   );
 };
 

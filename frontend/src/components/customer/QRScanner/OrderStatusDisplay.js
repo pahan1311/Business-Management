@@ -200,7 +200,15 @@ const OrderStatusDisplay = ({ orderId, onClose }) => {
         {order.deliveryAddress && (
           <div className="mb-3">
             <h6>Delivery Address</h6>
-            <p className="text-muted">{order.deliveryAddress}</p>
+            <p className="text-muted">
+              {typeof order.deliveryAddress === 'object' 
+                ? `${order.deliveryAddress.street || ''}, 
+                   ${order.deliveryAddress.city || ''}, 
+                   ${order.deliveryAddress.state || ''} 
+                   ${order.deliveryAddress.zip || ''}, 
+                   ${order.deliveryAddress.country || ''}`
+                : order.deliveryAddress}
+            </p>
           </div>
         )}
 

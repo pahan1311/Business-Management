@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { orderAPI, customerAPI } from '../../../services/api';
 import { useCrud } from '../../../hooks/useApi';
-import Modal from '../../common/Modal';
 import Button from '../../common/Button';
 import StatusBadge from '../../common/StatusBadge';
 import LoadingSpinner from '../../common/LoadingSpinner';
 import { formatDate, formatCurrency, getStatusBadgeColor } from '../../../utils/helpers';
 import { ORDER_STATUS } from '../../../utils/constants';
+import OrderDetail from './OrderDetail';
 
 const OrderList = () => {
   const {
@@ -51,6 +51,10 @@ const OrderList = () => {
   const handleViewOrder = (order) => {
     setSelectedOrder(order);
     setShowModal(true);
+  };
+  
+  const handleOrderUpdate = (updatedOrder) => {
+    update(updatedOrder._id, updatedOrder);
   };
 
   const handleUpdateStatus = async (orderId, newStatus) => {
@@ -243,93 +247,12 @@ const OrderList = () => {
       </div>
 
       {/* Order Details Modal */}
-      <Modal
+      <OrderDetail
+        order={selectedOrder}
         show={showModal}
-        onHide={() => setShowModal(false)}
-        title={selectedOrder ? `Order #${selectedOrder.id}` : 'Order Details'}
-        size="lg"
-        showFooter={false}
-      >
-        {selectedOrder && (
-          <div>
-            <div className="row mb-3">
-              <div className="col-md-6">
-                <h6>Customer Information</h6>
-                <p className="mb-1">
-                  <strong>{selectedOrder.customerName || selectedOrder.customer?.name}</strong>
-                </p>
-                <p className="mb-1 text-muted">
-                  {selectedOrder.customer?.email}
-                </p>
-                <p className="text-muted">
-                  {selectedOrder.customer?.phone}
-                </p>
-              </div>
-              <div className="col-md-6">
-                <h6>Order Information</h6>
-                <p className="mb-1">
-                  <strong>Status:</strong> <StatusBadge status={selectedOrder.status} />
-                </p>
-                <p className="mb-1">
-                  <strong>Date:</strong> {formatDate(selectedOrder.createdAt)}
-                </p>
-                <p className="mb-1">
-                  <strong>Total:</strong> {formatCurrency(selectedOrder.total)}
-                </p>
-              </div>
-            </div>
-
-            <h6>Order Items</h6>
-            <div className="table-responsive">
-              <table className="table table-sm">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Quantity</th>
-                    <th>Price</th>
-                    <th>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedOrder.items?.map((item, index) => (
-                    <tr key={index}>
-                      <td>{item.name}</td>
-                      <td>{item.quantity}</td>
-                      <td>{formatCurrency(item.price)}</td>
-                      <td>{formatCurrency(item.quantity * item.price)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <th colSpan="3">Total</th>
-                    <th>{formatCurrency(selectedOrder.total)}</th>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            {getStatusOptions(selectedOrder.status).length > 0 && (
-              <div className="mt-3">
-                <h6>Update Status</h6>
-                <div className="d-flex gap-2">
-                  {getStatusOptions(selectedOrder.status).map(status => (
-                    <Button
-                      key={status}
-                      variant={getStatusBadgeColor(status)}
-                      size="sm"
-                      loading={modalLoading}
-                      onClick={() => handleUpdateStatus(selectedOrder.id, status)}
-                    >
-                      {status.replace('_', ' ').toUpperCase()}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
+        onClose={() => setShowModal(false)}
+        onUpdate={handleOrderUpdate}
+      />
     </div>
   );
 };
