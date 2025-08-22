@@ -1,85 +1,97 @@
 const express = require('express');
-const { prisma } = require('../../db/prisma');
 const { authGuard } = require('../../middlewares/authGuard');
 const { rbacGuard } = require('../../middlewares/rbacGuard');
-const { logger } = require('../../config/logger');
+const { zodValidate } = require('../../middlewares/zodValidate');
+const { InquiryController } = require('./controller');
+const { 
+  createInquirySchema, 
+  updateInquirySchema, 
+  inquiryQuerySchema,
+  replySchema 
+} = require('./schemas');
 
 const router = express.Router();
+const inquiryController = new InquiryController();
 
-// Get inquiries
+/**
+ * @route GET /api/inquiries
+ * @desc Get all inquiries with filtering and pagination
+ * @access Private - Admin, Staff, Customer (own inquiries only)
+ */
 router.get('/',
   authGuard,
-  rbacGuard(['ADMIN', 'CUSTOMER']),
-  async (req, res, next) => {
-    try {
-      const { status, assignedTo, page = 1, pageSize = 10 } = req.query;
-      const skip = (page - 1) * pageSize;
-      
-      const where = {};
-      if (status) where.status = status;
-      if (assignedTo) where.assignedToId = assignedTo;
-      
-      // Customers can only see their own inquiries
-      if (req.user.role === 'CUSTOMER') {
-        where.customerId = req.user.id;
-      }
-
-      const [inquiries, total] = await Promise.all([
-        prisma.inquiry.findMany({
-          where,
-          include: {
-            customer: true,
-            assignedTo: true
-          },
-          orderBy: [
-            { priority: 'desc' },
-            { createdAt: 'desc' }
-          ],
-          skip,
-          take: pageSize
-        }),
-        prisma.inquiry.count({ where })
-      ]);
-
-      res.json({
-        inquiries,
-        pagination: {
-          total,
-          page,
-          pageSize,
-          totalPages: Math.ceil(total / pageSize)
-        }
-      });
-    } catch (error) {
-      logger.error('Get inquiries error:', error);
-      next(error);
-    }
-  }
+  rbacGuard(['ADMIN', 'STAFF', 'CUSTOMER']),
+  zodValidate('query', inquiryQuerySchema),
+  (req, res, next) => inquiryController.getInquiries(req, res, next)
 );
 
-// Create inquiry
+/**
+ * @route GET /api/inquiries/:id
+ * @desc Get a single inquiry by ID
+ * @access Private - Admin, Staff, Customer (own inquiries only)
+ */
+router.get('/:id',
+  authGuard,
+  rbacGuard(['ADMIN', 'STAFF', 'CUSTOMER']),
+  (req, res, next) => inquiryController.getInquiryById(req, res, next)
+);
+
+/**
+ * @route POST /api/inquiries
+ * @desc Create a new inquiry
+ * @access Private - Admin, Staff, Customer
+ */
 router.post('/',
   authGuard,
-  rbacGuard(['ADMIN', 'CUSTOMER']),
-  async (req, res, next) => {
-    try {
-      const inquiry = await prisma.inquiry.create({
-        data: {
-          ...req.body,
-          customerId: req.user.role === 'CUSTOMER' ? req.user.id : req.body.customerId
-        },
-        include: {
-          customer: true
-        }
-      });
+  rbacGuard(['ADMIN', 'STAFF', 'CUSTOMER']),
+  zodValidate('body', createInquirySchema),
+  (req, res, next) => inquiryController.createInquiry(req, res, next)
+);
 
-      logger.info(`Inquiry created: ${inquiry.subject} by ${req.user.email}`);
-      res.status(201).json({ inquiry });
-    } catch (error) {
-      logger.error('Create inquiry error:', error);
-      next(error);
-    }
-  }
+/**
+ * @route PUT /api/inquiries/:id
+ * @desc Update an inquiry
+ * @access Private - Admin, Staff, Customer (own inquiries only)
+ */
+router.put('/:id',
+  authGuard,
+  rbacGuard(['ADMIN', 'STAFF', 'CUSTOMER']),
+  zodValidate('body', updateInquirySchema),
+  (req, res, next) => inquiryController.updateInquiry(req, res, next)
+);
+
+/**
+ * @route DELETE /api/inquiries/:id
+ * @desc Delete an inquiry
+ * @access Private - Admin only
+ */
+router.delete('/:id',
+  authGuard,
+  rbacGuard(['ADMIN']),
+  (req, res, next) => inquiryController.deleteInquiry(req, res, next)
+);
+
+/**
+ * @route POST /api/inquiries/:id/replies
+ * @desc Add a reply to an inquiry
+ * @access Private - Admin, Staff, Customer (own inquiries only)
+ */
+router.post('/:id/replies',
+  authGuard,
+  rbacGuard(['ADMIN', 'STAFF', 'CUSTOMER']),
+  zodValidate('body', replySchema),
+  (req, res, next) => inquiryController.addReply(req, res, next)
+);
+
+/**
+ * @route GET /api/inquiries/:id/replies
+ * @desc Get all replies for an inquiry
+ * @access Private - Admin, Staff, Customer (own inquiries only)
+ */
+router.get('/:id/replies',
+  authGuard,
+  rbacGuard(['ADMIN', 'STAFF', 'CUSTOMER']),
+  (req, res, next) => inquiryController.getReplies(req, res, next)
 );
 
 module.exports = router;

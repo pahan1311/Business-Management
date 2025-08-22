@@ -72,6 +72,18 @@ const registerSocketEvents = (io) => {
       socket.leave(`delivery:${deliveryId}`);
       logger.debug(`User ${socket.user.email} left delivery room: ${deliveryId}`);
     });
+    
+    // Handle joining inquiry rooms
+    socket.on('join-inquiry', (inquiryId) => {
+      socket.join(`inquiry:${inquiryId}`);
+      logger.debug(`User ${socket.user.email} joined inquiry room: ${inquiryId}`);
+    });
+
+    // Handle leaving inquiry rooms
+    socket.on('leave-inquiry', (inquiryId) => {
+      socket.leave(`inquiry:${inquiryId}`);
+      logger.debug(`User ${socket.user.email} left inquiry room: ${inquiryId}`);
+    });
 
     // Handle disconnect
     socket.on('disconnect', (reason) => {

@@ -28,6 +28,12 @@ class SocketEmitter {
     this.io.to(`delivery:${deliveryId}`).emit(event, data);
     logger.debug(`Emitted ${event} to delivery:${deliveryId}`, data);
   }
+  
+  // Emit to inquiry room (users following specific inquiry)
+  emitToInquiry(inquiryId, event, data) {
+    this.io.to(`inquiry:${inquiryId}`).emit(event, data);
+    logger.debug(`Emitted ${event} to inquiry:${inquiryId}`, data);
+  }
 
   // Emit to all connected users
   emitToAll(event, data) {
@@ -114,8 +120,73 @@ class SocketEmitter {
       timestamp: new Date().toISOString() 
     };
     
+    // Notify inquiry room
+    this.emitToInquiry(inquiryId, 'inquiry.received', data);
+    
     // Notify admins and available staff
     this.emitToRole('ADMIN', 'inquiry.received', data);
+    this.emitToRole('STAFF', 'inquiry.received', data);
+  }
+  
+  // Inquiry status changed
+  inquiryStatusChanged(inquiryId, status, customerId = null) {
+    const data = { 
+      inquiryId, 
+      status,
+      timestamp: new Date().toISOString() 
+    };
+    
+    // Notify inquiry room
+    this.emitToInquiry(inquiryId, 'inquiry.status.changed', data);
+    
+    // Notify admins and staff
+    this.emitToRole('ADMIN', 'inquiry.status.changed', data);
+    this.emitToRole('STAFF', 'inquiry.status.changed', data);
+    
+    // Notify customer if provided
+    if (customerId) {
+      this.emitToUser(customerId, 'inquiry.status.changed', data);
+    }
+  }
+  
+  // New reply added to an inquiry
+  inquiryReplyAdded(inquiryId, replyId, authorId, customerId = null, isInternal = false) {
+    const data = { 
+      inquiryId, 
+      replyId,
+      isInternal,
+      timestamp: new Date().toISOString() 
+    };
+    
+    // Notify inquiry room
+    this.emitToInquiry(inquiryId, 'inquiry.reply.added', data);
+    
+    // Notify admins and staff
+    this.emitToRole('ADMIN', 'inquiry.reply.added', data);
+    this.emitToRole('STAFF', 'inquiry.reply.added', data);
+    
+    // Notify customer if not an internal reply and customerId is provided
+    if (!isInternal && customerId) {
+      this.emitToUser(customerId, 'inquiry.reply.added', data);
+    }
+  }
+  
+  // Inquiry assigned
+  inquiryAssigned(inquiryId, assignedToId) {
+    const data = { 
+      inquiryId,
+      assignedToId,
+      timestamp: new Date().toISOString() 
+    };
+    
+    // Notify inquiry room
+    this.emitToInquiry(inquiryId, 'inquiry.assigned', data);
+    
+    // Notify the assigned staff member
+    this.emitToUser(assignedToId, 'inquiry.assigned', data);
+    
+    // Notify admins
+    this.emitToRole('ADMIN', 'inquiry.assigned', data);
   }
 }
 

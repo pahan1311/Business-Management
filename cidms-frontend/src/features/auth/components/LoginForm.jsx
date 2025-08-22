@@ -33,11 +33,33 @@ const LoginForm = () => {
       const result = await login(data).unwrap();
       dispatch(setCredentials(result));
       
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      // Redirect based on user role
+      const userRole = result.user.role;
+      console.log('Login successful - User role:', userRole);
       
-      enqueueSnackbar('Login successful', { variant: 'success' });
+      let dashboardPath;
+      
+      if (userRole === 'ADMIN') {
+        dashboardPath = '/admin/dashboard';
+        console.log('Redirecting to Admin dashboard');
+      } else if (userRole === 'STAFF') {
+        dashboardPath = '/staff/dashboard';
+        console.log('Redirecting to Staff dashboard');
+      } else if (userRole === 'DELIVERY') {
+        dashboardPath = '/delivery/dashboard';
+        console.log('Redirecting to Delivery dashboard');
+      } else if (userRole === 'CUSTOMER') {
+        dashboardPath = '/customer/dashboard';
+        console.log('Redirecting to Customer dashboard');
+      } else {
+        dashboardPath = '/';
+        console.log('Unknown role, redirecting to root');
+      }
+      
+      enqueueSnackbar(`Login successful as ${userRole}`, { variant: 'success' });
+      navigate(dashboardPath, { replace: true });
     } catch (error) {
+      console.error('Login error:', error);
       enqueueSnackbar(error.data?.message || 'Login failed', { variant: 'error' });
     }
   };

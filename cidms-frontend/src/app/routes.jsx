@@ -38,6 +38,7 @@ import StaffTasks from '../features/staff/pages/StaffTasks';
 import DeliveryDashboard from '../features/delivery/pages/DeliveryDashboard';
 import AssignedDeliveries from '../features/delivery/pages/AssignedDeliveries';
 import DeliveryScan from '../features/delivery/pages/DeliveryScan';
+import IssueReport from '../features/delivery/pages/IssueReport';
 
 // Customer Pages
 import CustomerDashboard from '../features/customer/pages/CustomerDashboard';
@@ -107,6 +108,7 @@ const AppRoutes = () => {
         <Route path="assigned" element={<AssignedDeliveries />} />
         <Route path="deliveries/:id" element={<DeliveryDetail />} />
         <Route path="scan" element={<DeliveryScan />} />
+        <Route path="issue-report" element={<IssueReport />} />
       </Route>
 
       <Route path="/customer/*" element={
@@ -125,10 +127,10 @@ const AppRoutes = () => {
       {/* Default redirect based on user role */}
       <Route path="/" element={
         user ? (
-          user.role === 'ADMIN' ? <Navigate to="/admin" replace /> :
-          user.role === 'STAFF' ? <Navigate to="/staff" replace /> :
-          user.role === 'DELIVERY' ? <Navigate to="/delivery" replace /> :
-          user.role === 'CUSTOMER' ? <Navigate to="/customer" replace /> :
+          user.role?.toUpperCase() === 'ADMIN' ? <Navigate to="/admin/dashboard" replace /> :
+          user.role?.toUpperCase() === 'STAFF' ? <Navigate to="/staff/dashboard" replace /> :
+          user.role?.toUpperCase() === 'DELIVERY' ? <Navigate to="/delivery/dashboard" replace /> :
+          user.role?.toUpperCase() === 'CUSTOMER' ? <Navigate to="/customer/dashboard" replace /> :
           <Navigate to="/login" replace />
         ) : (
           <Navigate to="/login" replace />

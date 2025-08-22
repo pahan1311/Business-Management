@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useGetLowStockQuery } from '../../features/inventory/api';
+import { useGetLowStockProductsQuery } from '../../features/inventory/api';
 import { useSocket } from '../../hooks/useSocket';
 
 const LowStockAlert = () => {
-  const { data, isLoading, error } = useGetLowStockQuery();
+  const { data, isLoading, error } = useGetLowStockProductsQuery();
   const [lowStockItems, setLowStockItems] = useState([]);
   const socket = useSocket();
 

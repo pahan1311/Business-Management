@@ -124,6 +124,8 @@ class AuthController {
     try {
       const userData = req.body;
       
+      console.log('Registration request data:', userData);
+      
       // This is a simplified implementation - in a real app, you'd want more validation
       const result = await authService.register(userData);
       

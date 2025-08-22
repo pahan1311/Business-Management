@@ -15,7 +15,14 @@ const authController = new AuthController();
 // Public routes
 router.post('/login', zodValidate(loginSchema), authController.login);
 router.post('/refresh', zodValidate(refreshTokenSchema), authController.refresh);
-router.post('/register', zodValidate(registerSchema), authController.register);
+router.post('/register', 
+  (req, res, next) => {
+    console.log('Raw registration request:', req.body);
+    next();
+  }, 
+  zodValidate(registerSchema), 
+  authController.register
+);
 
 // Protected routes
 router.post('/logout', authController.logout);

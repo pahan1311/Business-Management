@@ -14,6 +14,7 @@ const customerRoutes = require('./modules/customers/routes');
 const productRoutes = require('./modules/inventory/routes');
 const orderRoutes = require('./modules/orders/routes');
 const deliveryRoutes = require('./modules/deliveries/routes');
+const partnerRoutes = require('./modules/delivery-partners/routes');
 const taskRoutes = require('./modules/tasks/routes');
 const inquiryRoutes = require('./modules/inquiries/routes');
 const qrRoutes = require('./modules/qr/routes');
@@ -39,7 +40,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true
 }));
 
@@ -66,6 +67,7 @@ app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/inventory', productRoutes); // Both inventory and products use the same routes
 app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/deliveries', deliveryRoutes);
+app.use('/api/v1/partners', partnerRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/inquiries', inquiryRoutes);
 app.use('/api/v1/qr', qrRoutes);
