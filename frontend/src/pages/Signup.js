@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { authService } from '../services/authService';
+import authService from '../services/authService';
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -451,8 +451,8 @@ const Signup = () => {
                         onChange={handleInputChange}
                       />
                       <label className="form-check-label" htmlFor="agreeToTerms">
-                        I agree to the <a href="#" className="text-decoration-none">Terms of Service</a> and 
-                        <a href="#" className="text-decoration-none ms-1">Privacy Policy</a>
+                        I agree to the <button type="button" className="btn btn-link p-0 text-decoration-none border-0 align-baseline" onClick={() => window.open('/terms', '_blank')}>Terms of Service</button> and 
+                        <button type="button" className="btn btn-link p-0 text-decoration-none border-0 align-baseline ms-1" onClick={() => window.open('/privacy', '_blank')}>Privacy Policy</button>
                         <span className="text-danger">*</span>
                       </label>
                       {errors.agreeToTerms && (
