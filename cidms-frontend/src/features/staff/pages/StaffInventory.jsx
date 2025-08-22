@@ -33,28 +33,29 @@ const StaffInventory = () => {
 
   const columns = [
     {
-      key: 'sku',
-      label: 'SKU',
-      render: (product) => (
+      header: 'SKU',
+      accessorKey: 'sku',
+      cell: ({ row }) => (
         <code className="bg-light px-2 py-1 rounded">
-          {product.sku}
+          {row.original.sku}
         </code>
       ),
     },
     {
-      key: 'name',
-      label: 'Product',
-      render: (product) => (
+      header: 'Product Name',
+      accessorKey: 'name',
+      cell: ({ row }) => (
         <div>
-          <div className="fw-medium">{product.name}</div>
-          <small className="text-muted">{product.category}</small>
+          <div className="fw-medium">{row.original.name}</div>
+          <small className="text-muted">{row.original.category}</small>
         </div>
       ),
     },
     {
-      key: 'currentStock',
-      label: 'Current Stock',
-      render: (product) => {
+      header: 'Available Quantity',
+      accessorKey: 'currentStock',
+      cell: ({ row }) => {
+        const product = row.original;
         const isLowStock = product.currentStock <= product.reorderLevel;
         const isOutOfStock = product.currentStock === 0;
         
@@ -65,11 +66,13 @@ const StaffInventory = () => {
               isLowStock ? 'bg-warning text-dark' :
               'bg-success'
             }`}>
-              {product.currentStock}
+              {product.currentStock} {product.unit}
             </span>
-            <div className="small text-muted mt-1">
-              Unit: {product.unit}
-            </div>
+            {isLowStock && (
+              <div className="small text-warning mt-1">
+                <i className="bi bi-exclamation-triangle"></i> Low Stock
+              </div>
+            )}
           </div>
         );
       },

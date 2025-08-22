@@ -82,6 +82,24 @@ export const ordersApi = api.injectEndpoints({
       ],
     }),
 
+    // Assign order to delivery partner
+    assignOrder: builder.mutation({
+      query: ({ orderId, partnerId, instructions, expectedDeliveryDate }) => ({
+        url: `orders/${orderId}/assign`,
+        method: 'POST',
+        body: { 
+          partnerId, 
+          instructions: instructions || null,
+          expectedDeliveryDate: expectedDeliveryDate || null 
+        },
+      }),
+      invalidatesTags: (result, error, { orderId }) => [
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+        { type: 'Delivery', id: 'LIST' },
+      ],
+    }),
+
     // Get order tracking
     getOrderTracking: builder.query({
       query: (orderNumber) => `orders/tracking/${orderNumber}`,
@@ -145,6 +163,7 @@ export const {
   useUpdateOrderMutation,
   useCancelOrderMutation,
   useUpdateOrderStatusMutation,
+  useAssignOrderMutation,
   useGetOrderTrackingQuery,
   useAddTrackingUpdateMutation,
   useGetOrderAnalyticsQuery,

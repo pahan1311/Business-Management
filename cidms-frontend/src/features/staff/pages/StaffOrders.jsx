@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSnackbar } from 'notistack';
-import { useGetOrdersQuery, useUpdateOrderStatusMutation } from '../../orders/api';
+import { useGetOrdersQuery, useUpdateOrderStatusMutation, useAssignOrderMutation } from '../../orders/api';
+import { useGetDeliveryPartnersQuery } from '../../delivery-partners/api';
 import DataTable from '../../../components/common/DataTable';
 import StatusBadge from '../../../components/common/StatusBadge';
 import SearchInput from '../../../components/common/SearchInput';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
+import QRCodeModal from '../components/QRCodeModal';
+import AssignDeliveryModal from '../components/AssignDeliveryModal';
 import { ORDER_STATUS } from '../../../utils/constants';
 import { DateTime } from 'luxon';
 
@@ -15,6 +18,10 @@ const StaffOrders = () => {
   const [statusFilter, setStatusFilter] = useState([ORDER_STATUS.CONFIRMED, ORDER_STATUS.PROCESSING].join(','));
   const [actionOrder, setActionOrder] = useState(null);
   const [actionType, setActionType] = useState(null);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedOrderForQR, setSelectedOrderForQR] = useState(null);
+  const [selectedOrderForAssign, setSelectedOrderForAssign] = useState(null);
 
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
@@ -26,7 +33,9 @@ const StaffOrders = () => {
     status: statusFilter,
   });
 
+  const { data: deliveryPartners } = useGetDeliveryPartnersQuery();
   const [updateOrderStatus, { isLoading: isUpdatingStatus }] = useUpdateOrderStatusMutation();
+  const [assignOrder, { isLoading: isAssigning }] = useAssignOrderMutation();
 
   const columns = [
     {
@@ -99,58 +108,102 @@ const StaffOrders = () => {
       key: 'actions',
       label: 'Actions',
       render: (order) => (
-        <div className="dropdown">
+        <div className="btn-group">
           <button
-            className="btn btn-sm btn-outline-secondary dropdown-toggle"
-            type="button"
-            data-bs-toggle="dropdown"
+            className="btn btn-sm btn-outline-primary"
+            onClick={() => navigate(`/staff/orders/${order.id}`)}
+            title="View Details"
           >
-            Actions
+            <i className="bi bi-eye"></i>
           </button>
-          <ul className="dropdown-menu">
-            <li>
-              <button
-                className="dropdown-item"
-                onClick={() => navigate(`/staff/orders/${order.id}`)}
-              >
-                <i className="bi bi-eye me-2"></i>
-                View Details
-              </button>
-            </li>
-            <li><hr className="dropdown-divider" /></li>
-            {order.status === ORDER_STATUS.CONFIRMED && (
-              <li>
-                <button
-                  className="dropdown-item text-primary"
-                  onClick={() => {
-                    setActionOrder(order);
-                    setActionType('start_preparing');
-                  }}
-                >
-                  <i className="bi bi-play-circle me-2"></i>
-                  Start Preparing
-                </button>
-              </li>
-            )}
-            {order.status === ORDER_STATUS.PROCESSING && (
-              <li>
-                <button
-                  className="dropdown-item text-success"
-                  onClick={() => {
-                    setActionOrder(order);
-                    setActionType('mark_ready');
-                  }}
-                >
-                  <i className="bi bi-check-circle me-2"></i>
-                  Mark Ready for Dispatch
-                </button>
-              </li>
-            )}
-          </ul>
+          
+          {(order.status === ORDER_STATUS.READY_FOR_DELIVERY || order.status === ORDER_STATUS.PROCESSING) && (
+            <button
+              className="btn btn-sm btn-outline-warning"
+              onClick={() => {
+                setSelectedOrderForAssign(order);
+                setShowAssignModal(true);
+              }}
+              title="Assign to Delivery Partner"
+            >
+              <i className="bi bi-person-plus"></i>
+            </button>
+          )}
+          
+          {order.deliveryPartnerId && (
+            <button
+              className="btn btn-sm btn-outline-success"
+              onClick={() => {
+                setSelectedOrderForQR(order);
+                setShowQRModal(true);
+              }}
+              title="Generate QR Code"
+            >
+              <i className="bi bi-qr-code"></i>
+            </button>
+          )}
+          
+          <div className="dropdown">
+            <button
+              className="btn btn-sm btn-outline-secondary dropdown-toggle"
+              type="button"
+              data-bs-toggle="dropdown"
+            >
+              <i className="bi bi-three-dots"></i>
+            </button>
+            <ul className="dropdown-menu">
+              {order.status === ORDER_STATUS.CONFIRMED && (
+                <li>
+                  <button
+                    className="dropdown-item text-primary"
+                    onClick={() => {
+                      setActionOrder(order);
+                      setActionType('start_preparing');
+                    }}
+                  >
+                    <i className="bi bi-play-circle me-2"></i>
+                    Start Preparing
+                  </button>
+                </li>
+              )}
+              {order.status === ORDER_STATUS.PROCESSING && (
+                <li>
+                  <button
+                    className="dropdown-item text-success"
+                    onClick={() => {
+                      setActionOrder(order);
+                      setActionType('mark_ready');
+                    }}
+                  >
+                    <i className="bi bi-check-circle me-2"></i>
+                    Mark Ready for Dispatch
+                  </button>
+                </li>
+              )}
+            </ul>
+          </div>
         </div>
       ),
     },
   ];
+
+  const handleAssignDelivery = async (partnerId) => {
+    if (!selectedOrderForAssign) return;
+
+    try {
+      await assignOrder({
+        orderId: selectedOrderForAssign.id,
+        partnerId: partnerId
+      }).unwrap();
+
+      enqueueSnackbar('Order assigned to delivery partner successfully', { variant: 'success' });
+      setShowAssignModal(false);
+      setSelectedOrderForAssign(null);
+      refetch();
+    } catch (error) {
+      enqueueSnackbar('Failed to assign order to delivery partner', { variant: 'error' });
+    }
+  };
 
   const handleStatusUpdate = async () => {
     if (!actionOrder || !actionType) return;
@@ -324,6 +377,29 @@ const StaffOrders = () => {
         confirmText={actionType === 'start_preparing' ? 'Start Preparing' : 'Mark Ready'}
         confirmVariant={actionType === 'start_preparing' ? 'primary' : 'success'}
         loading={isUpdatingStatus}
+      />
+
+      {/* QR Code Modal */}
+      <QRCodeModal
+        open={showQRModal}
+        order={selectedOrderForQR}
+        onClose={() => {
+          setShowQRModal(false);
+          setSelectedOrderForQR(null);
+        }}
+      />
+
+      {/* Assign Delivery Modal */}
+      <AssignDeliveryModal
+        open={showAssignModal}
+        order={selectedOrderForAssign}
+        deliveryPartners={deliveryPartners?.data || []}
+        onAssign={handleAssignDelivery}
+        onClose={() => {
+          setShowAssignModal(false);
+          setSelectedOrderForAssign(null);
+        }}
+        loading={isAssigning}
       />
     </div>
   );

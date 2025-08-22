@@ -1,209 +1,257 @@
 import { useState } from 'react';
 import { useSnackbar } from 'notistack';
 import { 
-  useUpdateInventoryMutation,
-  useCreateStockMovementMutation 
+  useUpdateProductStockMutation
 } from '../../inventory/api';
 
-const StockUpdateModal = ({ product, onClose, onSuccess }) => {
-  const [movementType, setMovementType] = useState('INBOUND');
-  const [quantity, setQuantity] = useState('');
-  const [reason, setReason] = useState('RESTOCK');
-  const [notes, setNotes] = useState('');
+const StockUpdateModal = ({ open, product, onClose, onSuccess }) => {
+  const [movement, setMovement] = useState({
+    type: 'IN',
+    quantity: '',
+    reference: '',
+    notes: ''
+  });
 
   const { enqueueSnackbar } = useSnackbar();
-  
-  const [updateInventory, { isLoading: isUpdatingInventory }] = useUpdateInventoryMutation();
-  const [createStockMovement, { isLoading: isCreatingMovement }] = useCreateStockMovementMutation();
-
-  const isLoading = isUpdatingInventory || isCreatingMovement;
-
-  const reasonOptions = {
-    INBOUND: [
-      { value: 'RESTOCK', label: 'Restock' },
-      { value: 'RETURN', label: 'Customer Return' },
-      { value: 'ADJUSTMENT', label: 'Inventory Adjustment' },
-      { value: 'TRANSFER', label: 'Transfer In' },
-    ],
-    OUTBOUND: [
-      { value: 'SALE', label: 'Sale' },
-      { value: 'DAMAGE', label: 'Damaged' },
-      { value: 'EXPIRED', label: 'Expired' },
-      { value: 'ADJUSTMENT', label: 'Inventory Adjustment' },
-      { value: 'TRANSFER', label: 'Transfer Out' },
-    ],
-  };
+  const [updateProductStock, { isLoading }] = useUpdateProductStockMutation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!quantity || parseInt(quantity) <= 0) {
+    if (!movement.quantity || parseInt(movement.quantity) <= 0) {
       enqueueSnackbar('Please enter a valid quantity', { variant: 'error' });
       return;
     }
 
-    const quantityNum = parseInt(quantity);
-    const newStock = movementType === 'INBOUND' 
-      ? (product?.currentStock || 0) + quantityNum
-      : (product?.currentStock || 0) - quantityNum;
-
-    if (newStock < 0) {
-      enqueueSnackbar('Insufficient stock for this operation', { variant: 'error' });
-      return;
-    }
-
     try {
-      // Create stock movement record
-      await createStockMovement({
-        productId: product?.id,
-        type: movementType,
-        quantity: quantityNum,
-        reason,
-        notes: notes || `Stock ${movementType.toLowerCase()} by staff`,
+      await updateProductStock({
+        id: product.id,
+        movement: {
+          ...movement,
+          quantity: parseInt(movement.quantity)
+        }
       }).unwrap();
 
-      // Update inventory if product is provided
-      if (product) {
-        await updateInventory({
-          id: product.id,
-          currentStock: newStock,
-        }).unwrap();
-      }
-
       enqueueSnackbar(
-        `Stock ${movementType === 'INBOUND' ? 'added' : 'removed'} successfully`,
+        `Stock ${movement.type === 'IN' ? 'added' : 'removed'} successfully`, 
         { variant: 'success' }
       );
-
-      onSuccess();
+      
+      handleClose();
+      if (onSuccess) onSuccess();
     } catch (error) {
       enqueueSnackbar('Failed to update stock', { variant: 'error' });
     }
   };
 
+  const handleClose = () => {
+    setMovement({
+      type: 'IN',
+      quantity: '',
+      reference: '',
+      notes: ''
+    });
+    onClose();
+  };
+
+  const getNewStockLevel = () => {
+    if (!movement.quantity || !product) return product?.currentStock || 0;
+    
+    const qty = parseInt(movement.quantity);
+    const currentStock = product.currentStock || 0;
+    
+    if (movement.type === 'IN') {
+      return currentStock + qty;
+    } else {
+      return Math.max(0, currentStock - qty);
+    }
+  };
+
+  const isStockRemovalValid = () => {
+    if (movement.type === 'OUT' && movement.quantity) {
+      return parseInt(movement.quantity) <= (product?.currentStock || 0);
+    }
+    return true;
+  };
+
+  if (!product || !open) return null;
+
   return (
     <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-      <div className="modal-dialog">
+      <div className="modal-dialog modal-lg">
         <div className="modal-content">
           <div className="modal-header">
             <h5 className="modal-title">
-              {product ? `Update Stock - ${product.name}` : 'Stock Movement'}
+              <i className="bi bi-arrow-up-down me-2"></i>
+              Update Stock - {product.name}
             </h5>
             <button
               type="button"
               className="btn-close"
-              onClick={onClose}
+              onClick={handleClose}
               disabled={isLoading}
             ></button>
           </div>
-
+          
           <form onSubmit={handleSubmit}>
             <div className="modal-body">
-              {product && (
-                <div className="alert alert-info d-flex align-items-center mb-3">
-                  <i className="bi bi-info-circle me-2"></i>
+              {/* Product Info */}
+              <div className="alert alert-info mb-4">
+                <div className="d-flex justify-content-between align-items-center">
                   <div>
-                    <strong>Current Stock:</strong> {product.currentStock} {product.unit}
-                    <br />
-                    <strong>SKU:</strong> {product.sku}
+                    <h6 className="mb-1">{product.name}</h6>
+                    <p className="mb-0">SKU: {product.sku}</p>
                   </div>
-                </div>
-              )}
-
-              <div className="row g-3">
-                <div className="col-md-6">
-                  <label className="form-label">Movement Type</label>
-                  <select
-                    className="form-select"
-                    value={movementType}
-                    onChange={(e) => {
-                      setMovementType(e.target.value);
-                      setReason(reasonOptions[e.target.value][0].value);
-                    }}
-                    required
-                  >
-                    <option value="INBOUND">Inbound (Add Stock)</option>
-                    <option value="OUTBOUND">Outbound (Remove Stock)</option>
-                  </select>
-                </div>
-
-                <div className="col-md-6">
-                  <label className="form-label">Quantity</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    min="1"
-                    required
-                  />
-                </div>
-
-                <div className="col-12">
-                  <label className="form-label">Reason</label>
-                  <select
-                    className="form-select"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    required
-                  >
-                    {reasonOptions[movementType].map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="col-12">
-                  <label className="form-label">Notes (Optional)</label>
-                  <textarea
-                    className="form-control"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows="3"
-                    placeholder="Additional notes about this stock movement..."
-                  />
+                  <div className="text-end">
+                    <div className="fs-4">{product.currentStock} {product.unit}</div>
+                    <small className="text-muted">Current Stock</small>
+                  </div>
                 </div>
               </div>
 
-              {product && quantity && (
-                <div className="mt-3">
-                  <div className="alert alert-light border">
-                    <strong>Preview:</strong>
-                    <br />
-                    Current Stock: {product.currentStock} {product.unit}
-                    <br />
-                    {movementType === 'INBOUND' ? '+' : '-'}{quantity} {product.unit}
-                    <br />
-                    <strong>
-                      New Stock: {
-                        movementType === 'INBOUND' 
-                          ? product.currentStock + parseInt(quantity || 0)
-                          : product.currentStock - parseInt(quantity || 0)
-                      } {product.unit}
-                    </strong>
+              {/* Movement Type */}
+              <div className="mb-3">
+                <label className="form-label">
+                  <i className="bi bi-arrow-left-right me-2"></i>
+                  Movement Type <span className="text-danger">*</span>
+                </label>
+                <div className="d-flex gap-3">
+                  <div className="form-check">
+                    <input
+                      className="form-check-input"
+                      type="radio"
+                      name="movementType"
+                      id="stock-in"
+                      value="IN"
+                      checked={movement.type === 'IN'}
+                      onChange={(e) => setMovement({ ...movement, type: e.target.value })}
+                    />
+                    <label className="form-check-label" htmlFor="stock-in">
+                      Stock In (Add)
+                    </label>
                   </div>
+                  <div className="form-check">
+                    <input
+                      className="form-check-input"
+                      type="radio"
+                      name="movementType"
+                      id="stock-out"
+                      value="OUT"
+                      checked={movement.type === 'OUT'}
+                      onChange={(e) => setMovement({ ...movement, type: e.target.value })}
+                    />
+                    <label className="form-check-label" htmlFor="stock-out">
+                      Stock Out (Remove)
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quantity */}
+              <div className="mb-3">
+                <label className="form-label">
+                  <i className="bi bi-123 me-2"></i>
+                  Quantity <span className="text-danger">*</span>
+                </label>
+                <div className="input-group">
+                  <input
+                    type="number"
+                    className={`form-control ${!isStockRemovalValid() ? 'is-invalid' : ''}`}
+                    min="1"
+                    max={movement.type === 'OUT' ? product.currentStock : undefined}
+                    value={movement.quantity}
+                    onChange={(e) => setMovement({ ...movement, quantity: e.target.value })}
+                    placeholder="Enter quantity"
+                    required
+                  />
+                  <span className="input-group-text">{product.unit}</span>
+                  {!isStockRemovalValid() && (
+                    <div className="invalid-feedback">
+                      Cannot remove more than available stock ({product.currentStock} {product.unit})
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Reference */}
+              <div className="mb-3">
+                <label className="form-label">
+                  <i className="bi bi-bookmark me-2"></i>
+                  Reference
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={movement.reference}
+                  onChange={(e) => setMovement({ ...movement, reference: e.target.value })}
+                  placeholder="e.g., Purchase Order #123, Return #456"
+                />
+              </div>
+
+              {/* Notes */}
+              <div className="mb-3">
+                <label className="form-label">
+                  <i className="bi bi-chat-text me-2"></i>
+                  Notes
+                </label>
+                <textarea
+                  className="form-control"
+                  rows={2}
+                  value={movement.notes}
+                  onChange={(e) => setMovement({ ...movement, notes: e.target.value })}
+                  placeholder="Additional notes about this stock movement"
+                />
+              </div>
+
+              {/* Stock Preview */}
+              {movement.quantity && (
+                <div className={`alert alert-${movement.type === 'IN' ? 'success' : 'warning'} mb-0`}>
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <strong>Stock After Update:</strong>
+                    </div>
+                    <div className="fs-5">
+                      {getNewStockLevel()} {product.unit}
+                      <span className="ms-2 text-muted">
+                        ({movement.type === 'IN' ? '+' : '-'}{movement.quantity} {product.unit})
+                      </span>
+                    </div>
+                  </div>
+                  {movement.type === 'OUT' && getNewStockLevel() <= (product.reorderLevel || 0) && (
+                    <div className="mt-2 text-warning">
+                      <i className="bi bi-exclamation-triangle me-1"></i>
+                      Warning: Stock will be at or below reorder level
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-
+            
             <div className="modal-footer">
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={onClose}
+                className="btn btn-outline-secondary"
+                onClick={handleClose}
                 disabled={isLoading}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className={`btn ${movementType === 'INBOUND' ? 'btn-success' : 'btn-warning'}`}
-                disabled={isLoading}
+                className={`btn btn-${movement.type === 'IN' ? 'success' : 'warning'}`}
+                disabled={isLoading || !movement.quantity || !isStockRemovalValid()}
               >
-                {isLoading && <span className="spinner-border spinner-border-sm me-2"></span>}
-                {movementType === 'INBOUND' ? 'Add Stock' : 'Remove Stock'}
+                {isLoading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <i className={`bi bi-${movement.type === 'IN' ? 'plus' : 'dash'}-circle me-2`}></i>
+                    Update Stock
+                  </>
+                )}
               </button>
             </div>
           </form>

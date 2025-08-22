@@ -1,17 +1,24 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useGetMyTasksQuery } from '../../tasks/api';
 import { useGetOrdersQuery } from '../../orders/api';
+import { useGetInventoryQuery } from '../../inventory/api';
 import StatusBadge from '../../../components/common/StatusBadge';
 import LoadingBlock from '../../../components/common/LoadingBlock';
 import { ORDER_STATUS, TASK_STATUS } from '../../../utils/constants';
 import { DateTime } from 'luxon';
 
 const StaffDashboard = () => {
+  const navigate = useNavigate();
+  
   const { data: tasks, isLoading: tasksLoading } = useGetMyTasksQuery();
   const { data: orders, isLoading: ordersLoading } = useGetOrdersQuery({
     status: [ORDER_STATUS.CONFIRMED, ORDER_STATUS.PROCESSING].join(','),
     limit: 10
+  });
+  const { data: inventory, isLoading: inventoryLoading } = useGetInventoryQuery({
+    limit: 50,
+    stockLevel: 'low'
   });
 
   const tasksByStatus = tasks?.reduce((acc, task) => {
@@ -21,6 +28,14 @@ const StaffDashboard = () => {
 
   const urgentTasks = tasks?.filter(task => 
     task.priority === 'HIGH' || task.priority === 'URGENT'
+  ) || [];
+
+  const lowStockItems = inventory?.data?.filter(item => 
+    item.currentStock <= item.reorderLevel
+  ) || [];
+
+  const outOfStockItems = inventory?.data?.filter(item => 
+    item.currentStock === 0
   ) || [];
 
   return (
@@ -37,9 +52,9 @@ const StaffDashboard = () => {
         <div className="col-md-3">
           <div className="card bg-primary bg-opacity-10 border-primary border-opacity-25">
             <div className="card-body text-center">
-              <i className="bi bi-list-task fs-1 text-primary"></i>
-              <h4 className="mt-2 mb-1">{tasks?.length || 0}</h4>
-              <p className="text-muted mb-0">My Tasks</p>
+              <i className="bi bi-bag-check fs-1 text-primary"></i>
+              <h4 className="mt-2 mb-1">{orders?.data?.length || 0}</h4>
+              <p className="text-muted mb-0">Orders to Process</p>
             </div>
           </div>
         </div>
@@ -47,30 +62,98 @@ const StaffDashboard = () => {
           <div className="card bg-warning bg-opacity-10 border-warning border-opacity-25">
             <div className="card-body text-center">
               <i className="bi bi-exclamation-triangle fs-1 text-warning"></i>
-              <h4 className="mt-2 mb-1">{urgentTasks.length}</h4>
-              <p className="text-muted mb-0">Urgent Tasks</p>
+              <h4 className="mt-2 mb-1">{lowStockItems.length}</h4>
+              <p className="text-muted mb-0">Low Stock Items</p>
             </div>
           </div>
         </div>
         <div className="col-md-3">
-          <div className="card bg-info bg-opacity-10 border-info border-opacity-25">
+          <div className="card bg-danger bg-opacity-10 border-danger border-opacity-25">
             <div className="card-body text-center">
-              <i className="bi bi-box-seam fs-1 text-info"></i>
-              <h4 className="mt-2 mb-1">{orders?.data?.length || 0}</h4>
-              <p className="text-muted mb-0">Orders to Prepare</p>
+              <i className="bi bi-x-circle fs-1 text-danger"></i>
+              <h4 className="mt-2 mb-1">{outOfStockItems.length}</h4>
+              <p className="text-muted mb-0">Out of Stock</p>
             </div>
           </div>
         </div>
         <div className="col-md-3">
           <div className="card bg-success bg-opacity-10 border-success border-opacity-25">
             <div className="card-body text-center">
-              <i className="bi bi-check-circle fs-1 text-success"></i>
-              <h4 className="mt-2 mb-1">{tasksByStatus[TASK_STATUS.COMPLETED] || 0}</h4>
-              <p className="text-muted mb-0">Completed Today</p>
+              <i className="bi bi-list-task fs-1 text-success"></i>
+              <h4 className="mt-2 mb-1">{tasks?.length || 0}</h4>
+              <p className="text-muted mb-0">My Tasks</p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Inventory Alerts */}
+      {(lowStockItems.length > 0 || outOfStockItems.length > 0) && (
+        <div className="row g-4 mb-4">
+          <div className="col-12">
+            <div className="card border-warning">
+              <div className="card-header bg-warning bg-opacity-10">
+                <h6 className="mb-0 text-warning">
+                  <i className="bi bi-exclamation-triangle me-2"></i>
+                  Inventory Alerts
+                </h6>
+              </div>
+              <div className="card-body">
+                <div className="row">
+                  {outOfStockItems.length > 0 && (
+                    <div className="col-md-6 mb-3">
+                      <h6 className="text-danger">Out of Stock</h6>
+                      <div className="list-group list-group-flush">
+                        {outOfStockItems.slice(0, 3).map(item => (
+                          <div key={item.id} className="list-group-item px-0 d-flex justify-content-between">
+                            <div>
+                              <strong>{item.name}</strong>
+                              <div className="small text-muted">{item.sku}</div>
+                            </div>
+                            <span className="badge bg-danger">0 {item.unit}</span>
+                          </div>
+                        ))}
+                        {outOfStockItems.length > 3 && (
+                          <div className="text-center">
+                            <Link to="/staff/inventory?filter=out-of-stock" className="btn btn-sm btn-outline-danger">
+                              View All {outOfStockItems.length} Items
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {lowStockItems.length > 0 && (
+                    <div className="col-md-6 mb-3">
+                      <h6 className="text-warning">Low Stock</h6>
+                      <div className="list-group list-group-flush">
+                        {lowStockItems.slice(0, 3).map(item => (
+                          <div key={item.id} className="list-group-item px-0 d-flex justify-content-between">
+                            <div>
+                              <strong>{item.name}</strong>
+                              <div className="small text-muted">{item.sku}</div>
+                            </div>
+                            <span className="badge bg-warning text-dark">
+                              {item.currentStock} {item.unit}
+                            </span>
+                          </div>
+                        ))}
+                        {lowStockItems.length > 3 && (
+                          <div className="text-center">
+                            <Link to="/staff/inventory?filter=low-stock" className="btn btn-sm btn-outline-warning">
+                              View All {lowStockItems.length} Items
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="row g-4">
         {/* My Tasks */}

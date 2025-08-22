@@ -453,4 +453,146 @@ router.patch('/:id/status',
   }
 );
 
+// Assign order to delivery partner
+router.post('/:id/assign',
+  authGuard,
+  rbacGuard(['ADMIN', 'STAFF']),
+  async (req, res, next) => {
+    try {
+      const { partnerId, instructions, expectedDeliveryDate } = req.body;
+      
+      const order = await prisma.order.findUnique({
+        where: { id: req.params.id },
+        include: {
+          customer: true,
+          items: { include: { product: true } }
+        }
+      });
+
+      if (!order) {
+        return res.status(404).json({
+          error: {
+            code: 'ORDER_NOT_FOUND',
+            message: 'Order not found'
+          }
+        });
+      }
+
+      // Verify delivery partner exists and is active
+      const deliveryPartner = await prisma.deliveryPartner.findFirst({
+        where: { 
+          id: partnerId,
+          isActive: true 
+        }
+      });
+
+      if (!deliveryPartner) {
+        return res.status(404).json({
+          error: {
+            code: 'PARTNER_NOT_FOUND',
+            message: 'Active delivery partner not found'
+          }
+        });
+      }
+
+      // Check if order can be assigned (should be ready for delivery or preparing)
+      const assignableStatuses = ['READY_FOR_DISPATCH', 'PREPARING'];
+      if (!assignableStatuses.includes(order.status)) {
+        return res.status(400).json({
+          error: {
+            code: 'ORDER_NOT_ASSIGNABLE',
+            message: `Order with status ${order.status} cannot be assigned for delivery`
+          }
+        });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        // Create or update delivery task
+        const deliveryData = {
+          orderId: order.id,
+          assignedToId: partnerId,
+          instructions: instructions || null,
+          expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate) : null,
+          status: 'ASSIGNED'
+        };
+
+        const existingDelivery = await tx.delivery.findUnique({
+          where: { orderId: order.id }
+        });
+
+        let delivery;
+        if (existingDelivery) {
+          delivery = await tx.delivery.update({
+            where: { orderId: order.id },
+            data: deliveryData,
+            include: { assignedTo: true }
+          });
+        } else {
+          delivery = await tx.delivery.create({
+            data: deliveryData,
+            include: { assignedTo: true }
+          });
+        }
+
+        // Update order status if it's not already ready for dispatch
+        let updatedOrder = order;
+        if (order.status === 'PREPARING') {
+          updatedOrder = await tx.order.update({
+            where: { id: order.id },
+            data: { status: 'READY_FOR_DISPATCH' },
+            include: {
+              customer: true,
+              items: { include: { product: true } },
+              delivery: { include: { assignedTo: true } }
+            }
+          });
+
+          // Create status event
+          await tx.orderStatusEvent.create({
+            data: {
+              orderId: order.id,
+              status: 'READY_FOR_DISPATCH',
+              notes: `Order assigned to delivery partner: ${deliveryPartner.name}`
+            }
+          });
+        }
+
+        // Create delivery status event
+        await tx.deliveryStatusEvent.create({
+          data: {
+            deliveryId: delivery.id,
+            status: 'ASSIGNED',
+            notes: `Assigned to ${deliveryPartner.name}`
+          }
+        });
+
+        return { 
+          order: updatedOrder, 
+          delivery: delivery 
+        };
+      });
+
+      // Emit real-time events
+      const io = req.app.get('io');
+      if (io) {
+        const emitter = new SocketEmitter(io);
+        emitter.orderAssigned(result.order.id, partnerId, result.order.customerId);
+        emitter.deliveryAssigned(result.delivery.id, partnerId);
+      }
+
+      logger.info(`Order assigned: ${order.orderNumber} to ${deliveryPartner.name} by ${req.user.email}`);
+      
+      res.json({
+        message: 'Order assigned successfully',
+        order: result.order,
+        delivery: result.delivery
+      });
+
+    } catch (error) {
+      logger.error('Assign order error:', error);
+      next(error);
+    }
+  }
+);
+
 module.exports = router;

@@ -75,6 +75,42 @@ export const inventoryApi = api.injectEndpoints({
       query: () => '/inventory/low-stock',
       providesTags: ['Product'],
     }),
+    // Create stock movement
+    createStockMovement: builder.mutation({
+      query: (movementData) => ({
+        url: '/inventory/movements',
+        method: 'POST',
+        body: movementData,
+      }),
+      invalidatesTags: [
+        { type: 'Inventory', id: 'LIST' },
+        { type: 'Product', id: 'LIST' },
+        'StockMovement',
+      ],
+    }),
+
+    // Update product stock
+    updateProductStock: builder.mutation({
+      query: ({ id, movement }) => ({
+        url: `/inventory/products/${id}/stock`,
+        method: 'POST',
+        body: movement,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: 'Inventory', id },
+        { type: 'Inventory', id: 'LIST' },
+        { type: 'Product', id },
+        'StockMovement',
+      ],
+    }),
+
+    // Get inventory alerts
+    getInventoryAlerts: builder.query({
+      query: () => '/inventory/alerts',
+      providesTags: ['InventoryAlert'],
+    }),
+
+    // Get stock movements
     getStockMovements: builder.query({
       query: (params) => ({
         url: '/inventory/movements',
@@ -104,4 +140,6 @@ export const {
   useGetLowStockProductsQuery,
   useGetStockMovementsQuery,
   useCreateStockMovementMutation,
+  useUpdateProductStockMutation,
+  useGetInventoryAlertsQuery,
 } = inventoryApi;

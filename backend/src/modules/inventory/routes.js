@@ -141,4 +141,137 @@ router.get('/movements',
   }
 );
 
+// Update product stock
+router.post('/products/:id/stock',
+  authGuard,
+  rbacGuard(['ADMIN', 'STAFF']),
+  async (req, res, next) => {
+    try {
+      const { type, quantity, reference, notes } = req.body;
+      const productId = req.params.id;
+
+      // Validate input
+      if (!['IN', 'OUT'].includes(type)) {
+        return res.status(400).json({
+          error: {
+            code: 'INVALID_MOVEMENT_TYPE',
+            message: 'Movement type must be IN or OUT'
+          }
+        });
+      }
+
+      if (!quantity || quantity <= 0) {
+        return res.status(400).json({
+          error: {
+            code: 'INVALID_QUANTITY',
+            message: 'Quantity must be a positive number'
+          }
+        });
+      }
+
+      // Get current product
+      const product = await prisma.product.findUnique({
+        where: { id: productId }
+      });
+
+      if (!product) {
+        return res.status(404).json({
+          error: {
+            code: 'PRODUCT_NOT_FOUND',
+            message: 'Product not found'
+          }
+        });
+      }
+
+      // Check if we have enough stock for outbound movement
+      if (type === 'OUT' && product.onHand < quantity) {
+        return res.status(400).json({
+          error: {
+            code: 'INSUFFICIENT_STOCK',
+            message: `Insufficient stock. Available: ${product.onHand}, Requested: ${quantity}`
+          }
+        });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        // Calculate new stock level
+        const newStock = type === 'IN' 
+          ? product.onHand + quantity 
+          : product.onHand - quantity;
+
+        // Update product stock
+        const updatedProduct = await tx.product.update({
+          where: { id: productId },
+          data: { onHand: newStock }
+        });
+
+        // Create stock movement record
+        const movement = await tx.stockMovement.create({
+          data: {
+            productId: productId,
+            type: type,
+            quantity: quantity,
+            reference: reference || null,
+            notes: notes || `Stock ${type.toLowerCase()} by ${req.user.email}`,
+            userId: req.user.userId
+          }
+        });
+
+        return { product: updatedProduct, movement };
+      });
+
+      logger.info(`Stock updated: ${product.name} ${type} ${quantity} by ${req.user.email}`);
+      
+      res.json({
+        message: 'Stock updated successfully',
+        product: result.product,
+        movement: result.movement
+      });
+
+    } catch (error) {
+      logger.error('Update stock error:', error);
+      next(error);
+    }
+  }
+);
+
+// Get inventory alerts (low stock, out of stock)
+router.get('/alerts',
+  authGuard,
+  rbacGuard(['ADMIN', 'STAFF']),
+  async (req, res, next) => {
+    try {
+      const [lowStock, outOfStock] = await Promise.all([
+        // Low stock products (at or below reorder level)
+        prisma.product.findMany({
+          where: {
+            isActive: true,
+            onHand: { lte: prisma.product.fields.reorderPoint },
+            onHand: { gt: 0 }
+          },
+          orderBy: { onHand: 'asc' }
+        }),
+        // Out of stock products
+        prisma.product.findMany({
+          where: {
+            isActive: true,
+            onHand: 0
+          },
+          orderBy: { name: 'asc' }
+        })
+      ]);
+
+      res.json({
+        lowStock,
+        outOfStock,
+        totalAlerts: lowStock.length + outOfStock.length
+      });
+
+    } catch (error) {
+      logger.error('Get inventory alerts error:', error);
+      next(error);
+    }
+  }
+);
+
 module.exports = router;
