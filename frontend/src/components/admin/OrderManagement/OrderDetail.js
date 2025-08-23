@@ -3,6 +3,7 @@ import { Modal, Button, Form, ListGroup, Row, Col } from 'react-bootstrap';
 import { orderAPI, staffAPI, deliveryAPI, userAPI } from '../../../services/api';
 import StatusBadge from '../../common/StatusBadge';
 import LoadingSpinner from '../../common/LoadingSpinner';
+import OrderQRGenerator from './OrderQRGenerator';
 import { formatCurrency, formatDate } from '../../../utils/helpers';
 import { ORDER_STATUS } from '../../../utils/constants';
 
@@ -15,6 +16,7 @@ const OrderDetail = ({ order, show, onClose, onUpdate }) => {
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showQRGenerator, setShowQRGenerator] = useState(false);
 
   useEffect(() => {
     if (order) {
@@ -157,6 +159,7 @@ const OrderDetail = ({ order, show, onClose, onUpdate }) => {
   if (!order) return null;
 
   return (
+    <>
     <Modal show={show} onHide={onClose} size="lg" backdrop="static">
       <Modal.Header closeButton>
         <Modal.Title>
@@ -332,11 +335,29 @@ const OrderDetail = ({ order, show, onClose, onUpdate }) => {
       </Modal.Body>
       
       <Modal.Footer>
-        <Button variant="secondary" onClick={onClose}>
-          Close
-        </Button>
+        <div className="d-flex justify-content-between w-100">
+          <Button 
+            variant="info" 
+            onClick={() => setShowQRGenerator(true)}
+            disabled={!order}
+          >
+            <i className="bi bi-qr-code me-2"></i>
+            Generate QR Code
+          </Button>
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
       </Modal.Footer>
     </Modal>
+
+    {/* QR Generator Modal */}
+    <OrderQRGenerator 
+      order={order} 
+      show={showQRGenerator} 
+      onClose={() => setShowQRGenerator(false)} 
+    />
+  </>
   );
 };
 

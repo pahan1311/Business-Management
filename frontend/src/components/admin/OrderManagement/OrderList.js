@@ -9,6 +9,7 @@ import { ORDER_STATUS } from '../../../utils/constants';
 import OrderDetail from './OrderDetail';
 import { Modal, Form, Image } from 'react-bootstrap';
 import QRCodeService from '../../../services/qrCodeService';
+import DeliveryPDFManager from '../../../services/deliveryPDFManager';
 
 const OrderList = () => {
   const {
@@ -37,6 +38,8 @@ const OrderList = () => {
   const [deliveries, setDeliveries] = useState([]);
   const [selectedDeliveryForQR, setSelectedDeliveryForQR] = useState(null);
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' or 'deliveries'
+  const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [pdfManager] = useState(() => new DeliveryPDFManager());
   
   useEffect(() => {
     fetchOrders();
@@ -622,6 +625,96 @@ const OrderList = () => {
     }
   };
 
+  const handleGeneratePDFReport = async (delivery) => {
+    setPdfGenerating(true);
+    try {
+      console.log("Generating PDF report for delivery:", delivery);
+      
+      // Find the related order data
+      const relatedOrder = orders.find(order => 
+        order._id === delivery.order || order.id === delivery.order
+      );
+
+      if (!relatedOrder) {
+        console.warn("No related order found for delivery, generating PDF with available data");
+      }
+
+      // Generate PDF and upload to Google Drive
+      const result = await pdfManager.generateAndUploadDeliveryPDF(delivery, relatedOrder);
+      
+      if (result.success) {
+        // Create a custom modal for QR code display with download option
+        const qrWindow = window.open('', '_blank', 'width=500,height=600');
+        qrWindow.document.write(`
+          <html>
+            <head>
+              <title>PDF Report - QR Code Access</title>
+              <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+              <style>
+                body { padding: 20px; text-align: center; font-family: Arial, sans-serif; }
+                .qr-container { margin: 20px 0; }
+                .btn-group { margin: 15px 0; }
+                .info-card { background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <h3 class="text-primary">📄 PDF Report Generated Successfully</h3>
+                
+                <div class="info-card">
+                  <h5>Delivery Information</h5>
+                  <p><strong>Delivery ID:</strong> ${delivery.id || delivery._id}</p>
+                  <p><strong>Customer:</strong> ${delivery.customerName || 'N/A'}</p>
+                  <p><strong>File:</strong> ${result.filename}</p>
+                </div>
+                
+                <div class="qr-container">
+                  <h5>Scan QR Code to Access PDF</h5>
+                  <img src="${result.qrCodeData}" alt="QR Code" style="max-width: 250px; border: 1px solid #ddd; padding: 10px;"/>
+                </div>
+                
+                <div class="btn-group d-flex flex-column gap-2">
+                  <button class="btn btn-success" onclick="downloadQRCode()">
+                    📥 Download QR Code
+                  </button>
+                  <a href="${result.uploadResult.shareableLink}" target="_blank" class="btn btn-primary">
+                    🔗 Open PDF in Google Drive
+                  </a>
+                  <button class="btn btn-secondary" onclick="window.close()">
+                    ✕ Close
+                  </button>
+                </div>
+                
+                ${result.uploadResult.note ? `
+                  <div class="alert alert-info mt-3">
+                    <small>${result.uploadResult.note}</small>
+                  </div>
+                ` : ''}
+              </div>
+              
+              <script>
+                function downloadQRCode() {
+                  const link = document.createElement('a');
+                  link.download = 'qr_code_${delivery.id || delivery._id}_${new Date().toISOString().split('T')[0]}.png';
+                  link.href = '${result.qrCodeData}';
+                  link.click();
+                }
+              </script>
+            </body>
+          </html>
+        `);
+      } else {
+        throw new Error(result.error || 'Unknown error occurred');
+      }
+      
+    } catch (error) {
+      console.error('Error generating PDF report:', error);
+      alert(`Error generating PDF report: ${error.message || 'Unknown error'}`);
+    } finally {
+      setPdfGenerating(false);
+    }
+  };
+
   const getStatusOptions = (currentStatus) => {
     const statusFlow = {
       [ORDER_STATUS.PENDING]: [ORDER_STATUS.CONFIRMED, ORDER_STATUS.CANCELLED],
@@ -916,6 +1009,20 @@ const OrderList = () => {
                               onClick={() => handleGenerateQRForDelivery(delivery)}
                             >
                               <i className="bi bi-qr-code"></i>
+                            </Button>
+                            
+                            <Button 
+                              size="sm"
+                              variant="outline-success"
+                              title="Generate PDF Report"
+                              onClick={() => handleGeneratePDFReport(delivery)}
+                              disabled={pdfGenerating}
+                            >
+                              {pdfGenerating ? (
+                                <i className="bi bi-hourglass-split"></i>
+                              ) : (
+                                <i className="bi bi-file-earmark-pdf"></i>
+                              )}
                             </Button>
                             
                             <Button 
