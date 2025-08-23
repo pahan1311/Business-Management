@@ -151,7 +151,7 @@ class GoogleDriveService {
     }
   }
 
-  // Upload file using Google Drive API v3 with new authentication
+  // Upload file using traditional multipart upload
   async uploadFileWithFetch(fileBlob, fileName, mimeType = 'application/pdf') {
     try {
       if (!this.accessToken) {
@@ -162,38 +162,23 @@ class GoogleDriveService {
       console.log(`📁 Target folder ID: ${this.folderId}`);
       console.log(`📄 File size: ${(fileBlob.size / 1024).toFixed(2)} KB`);
       
-      // Use multipart upload to upload file with metadata in one request
-      const boundary = '-------314159265358979323846';
-      const delimiter = "\r\n--" + boundary + "\r\n";
-      const close_delim = "\r\n--" + boundary + "--";
-
+      // Create form data for multipart upload
       const metadata = {
         name: fileName,
         parents: [this.folderId]
       };
 
-      // Convert blob to base64
-      const base64Data = await this.blobToBase64(fileBlob);
-      const base64Content = base64Data.split(',')[1]; // Remove data:application/pdf;base64, prefix
-
-      const multipartRequestBody =
-        delimiter +
-        'Content-Type: application/json\r\n\r\n' +
-        JSON.stringify(metadata) +
-        delimiter +
-        `Content-Type: ${mimeType}\r\n` +
-        'Content-Transfer-Encoding: base64\r\n\r\n' +
-        base64Content +
-        close_delim;
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
+      form.append('file', fileBlob);
 
       console.log('🔧 Uploading file to Google Drive...');
       const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-          'Content-Type': `multipart/related; boundary="${boundary}"`
+          'Authorization': `Bearer ${this.accessToken}`
         },
-        body: multipartRequestBody
+        body: form
       });
 
       if (!response.ok) {
@@ -203,7 +188,7 @@ class GoogleDriveService {
           statusText: response.statusText,
           error: errorText
         });
-        throw new Error(`Failed to upload file: ${response.status} ${response.statusText} - ${errorText}`);
+        throw new Error(`Failed to upload file: ${response.status} ${response.statusText}`);
       }
 
       const fileData = await response.json();
@@ -215,14 +200,102 @@ class GoogleDriveService {
     }
   }
 
-  // Helper method to convert blob to base64
-  blobToBase64(blob) {
+  // Alternative upload method using XMLHttpRequest
+  async uploadFileWithXHR(fileBlob, fileName, mimeType = 'application/pdf') {
     return new Promise((resolve, reject) => {
+      if (!this.accessToken) {
+        reject(new Error('No access token available'));
+        return;
+      }
+
+      const boundary = '-------314159265358979323846';
+      const delimiter = "\r\n--" + boundary + "\r\n";
+      const close_delim = "\r\n--" + boundary + "--";
+
+      const metadata = {
+        name: fileName,
+        parents: [this.folderId]
+      };
+
+      const xhr = new XMLHttpRequest();
+      
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          const response = JSON.parse(xhr.responseText);
+          console.log('✅ File uploaded successfully with XHR:', response);
+          resolve(response);
+        } else {
+          console.error('❌ XHR Upload failed:', xhr.status, xhr.statusText);
+          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+        }
+      };
+
+      xhr.onerror = function() {
+        console.error('❌ XHR Network error');
+        reject(new Error('Network error during upload'));
+      };
+
+      xhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart');
+      xhr.setRequestHeader('Authorization', `Bearer ${this.accessToken}`);
+      xhr.setRequestHeader('Content-Type', `multipart/related; boundary="${boundary}"`);
+
+      // Read file as array buffer
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
+      reader.onload = function() {
+        const arrayBuffer = reader.result;
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const binaryString = String.fromCharCode.apply(null, uint8Array);
+        
+        const requestBody = 
+          delimiter +
+          'Content-Type: application/json\r\n\r\n' +
+          JSON.stringify(metadata) +
+          delimiter +
+          `Content-Type: ${mimeType}\r\n\r\n` +
+          binaryString +
+          close_delim;
+        
+        xhr.send(requestBody);
+      };
+      
+      reader.readAsArrayBuffer(fileBlob);
     });
+  }
+
+  // Make file publicly accessible
+  async makeFilePublic(fileId) {
+    try {
+      console.log(`🌐 Making file public: ${fileId}`);
+      
+      if (!this.accessToken) {
+        throw new Error('No access token available');
+      }
+
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          role: 'reader',
+          type: 'anyone'
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Failed to make file public:', errorText);
+        throw new Error(`Failed to make file public: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ File made public successfully:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Error making file public:', error);
+      throw error;
+    }
   }
 
   // Get shareable link for uploaded file
@@ -281,6 +354,65 @@ class GoogleDriveService {
       console.error('❌ Error creating shareable link:', error);
       // Return a basic link even if permission setting fails
       return `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
+    }
+  }
+
+  // Main upload method that orchestrates the entire process
+  async uploadFile(fileBlob, fileName, assignedPerson = '') {
+    try {
+      console.log('🚀 Starting file upload process...');
+      console.log('📋 Upload details:', {
+        fileName,
+        fileSize: fileBlob.size,
+        assignedPerson,
+        targetFolder: this.folderId
+      });
+
+      // Ensure we're authenticated first
+      await this.authenticate();
+
+      // Upload the file
+      console.log('📤 Uploading file to Google Drive...');
+      const uploadedFile = await this.uploadFileWithFetch(fileBlob, fileName);
+      
+      if (!uploadedFile || !uploadedFile.id) {
+        throw new Error('File upload failed - no file ID returned');
+      }
+
+      console.log('✅ File uploaded with ID:', uploadedFile.id);
+
+      // Make the file public (optional, but useful for QR code access)
+      try {
+        await this.makeFilePublic(uploadedFile.id);
+        console.log('🌐 File made publicly accessible');
+      } catch (shareError) {
+        console.warn('⚠️ Could not make file public, but upload succeeded:', shareError.message);
+      }
+
+      // Generate the shareable link
+      const fileUrl = `https://drive.google.com/file/d/${uploadedFile.id}/view`;
+      
+      console.log('🔗 Generated shareable link:', fileUrl);
+      
+      return {
+        success: true,
+        fileId: uploadedFile.id,
+        fileName: uploadedFile.name,
+        fileUrl: fileUrl,
+        message: 'File uploaded successfully to Google Drive!',
+        uploadedFile: uploadedFile
+      };
+
+    } catch (error) {
+      console.error('❌ Upload process failed:', error);
+      
+      // Return fallback information
+      return {
+        success: false,
+        error: error.message,
+        fileUrl: `localhost:3000/fallback/${fileName}`,
+        message: `Upload failed: ${error.message}. Using fallback URL.`
+      };
     }
   }
 
