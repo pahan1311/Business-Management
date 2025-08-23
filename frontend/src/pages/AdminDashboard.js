@@ -9,6 +9,7 @@ import StaffList from '../components/admin/StaffManagement/StaffList';
 import OrderList from '../components/admin/OrderManagement/OrderList';
 import InventoryList from '../components/admin/InventoryManagement/InventoryList';
 import DeliveryPersonList from '../components/admin/DeliveryManagement/DeliveryPersonList';
+import GoogleDriveTest from '../components/common/GoogleDriveTest';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -306,6 +307,9 @@ const AdminDashboard = () => {
               <Nav.Item>
                 <Nav.Link eventKey="delivery">Delivery Staff</Nav.Link>
               </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="google-test">Google Drive Test</Nav.Link>
+              </Nav.Item>
             </Nav>
           </Col>
         </Row>
@@ -329,6 +333,9 @@ const AdminDashboard = () => {
               </Tab.Pane>
               <Tab.Pane eventKey="delivery">
                 <DeliveryPersonList />
+              </Tab.Pane>
+              <Tab.Pane eventKey="google-test">
+                <GoogleDriveTest />
               </Tab.Pane>
             </Tab.Content>
           </Col>

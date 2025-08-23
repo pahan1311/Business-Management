@@ -210,13 +210,27 @@ class DeliveryPDFManager {
       }
 
       console.log('📤 Uploading file to Google Drive...');
+      console.log(`📁 Target folder: ${this.driveService.folderId}`);
+      console.log(`📄 File: ${filename} (${(pdfBlob.size / 1024).toFixed(2)} KB)`);
+      
       // Upload file and get shareable link
       const uploadResult = await this.driveService.uploadAndShare(pdfBlob, filename);
       
       console.log('✅ File uploaded successfully:', uploadResult);
+      console.log('🔗 Shareable link:', uploadResult.shareableLink);
+      
+      // Verify the link format
+      if (!uploadResult.shareableLink.includes('drive.google.com')) {
+        console.warn('⚠️ Warning: Link does not appear to be a Google Drive link');
+      }
+      
       return uploadResult;
     } catch (error) {
       console.error('❌ Real Google Drive upload failed:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack
+      });
       throw new Error(`Google Drive upload failed: ${error.message}`);
     }
   }
@@ -485,6 +499,48 @@ class DeliveryPDFManager {
     } catch (error) {
       console.error('❌ Error in order PDF generation:', error);
       throw error;
+    }
+  }
+
+  // Test method to verify Google Drive connectivity
+  async testGoogleDriveConnection() {
+    try {
+      console.log('🧪 Testing Google Drive connection...');
+      
+      // Initialize and authenticate
+      await this.driveService.initializeClient();
+      const authenticated = await this.driveService.authenticate();
+      
+      if (!authenticated) {
+        return {
+          success: false,
+          error: 'Authentication failed'
+        };
+      }
+
+      // Create a simple test file
+      const testContent = 'This is a test file for Google Drive connectivity.';
+      const testBlob = new Blob([testContent], { type: 'text/plain' });
+      const testFilename = `test_${Date.now()}.txt`;
+
+      // Try to upload
+      const uploadResult = await this.driveService.uploadAndShare(testBlob, testFilename);
+      
+      console.log('✅ Google Drive test successful:', uploadResult);
+      
+      return {
+        success: true,
+        fileId: uploadResult.fileId,
+        shareableLink: uploadResult.shareableLink,
+        message: 'Google Drive connection working properly'
+      };
+      
+    } catch (error) {
+      console.error('❌ Google Drive test failed:', error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 }
