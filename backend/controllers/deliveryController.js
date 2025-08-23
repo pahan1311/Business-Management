@@ -88,6 +88,9 @@ exports.getDeliveriesByDeliveryPerson = async (req, res) => {
 // Create new delivery
 exports.createDelivery = async (req, res) => {
   try {
+    console.log('Create delivery request body:', req.body);
+    console.log('User making request:', req.user);
+    
     const { 
       order: orderId, 
       deliveryPerson, 
@@ -101,11 +104,24 @@ exports.createDelivery = async (req, res) => {
       status
     } = req.body;
     
+    if (!orderId) {
+      return res.status(400).json({ message: 'Order ID is required' });
+    }
+    
+    if (!deliveryPerson) {
+      return res.status(400).json({ message: 'Delivery person is required' });
+    }
+    
+    console.log('Looking for order with ID:', orderId);
+    
     // Verify order exists
     const order = await Order.findById(orderId);
     if (!order) {
+      console.error('Order not found with ID:', orderId);
       return res.status(404).json({ message: 'Order not found' });
     }
+    
+    console.log('Found order:', order);
     
     // Calculate order value
     let orderValue = 0;

@@ -16,7 +16,7 @@ import Signup from './pages/Signup';
 import NotFound from './pages/NotFound';
 import AdminDashboard from './pages/AdminDashboard';
 import CustomerDashboard from './pages/CustomerDashboard';
-import StaffDashboard from './pages/StaffDashboard';
+import StaffDashboard from './pages/StaffDashboard_new';
 import DeliveryDashboard from './pages/DeliveryDashboard';
 
 // Admin Components

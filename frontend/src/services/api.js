@@ -97,7 +97,19 @@ export const orderAPI = {
 export const deliveryAPI = {
   getAll: (params = {}) => api.get('/deliveries', { params }),
   getById: (id) => api.get(`/deliveries/${id}`),
-  create: (delivery) => api.post('/deliveries', delivery),
+  create: (delivery) => {
+    // Ensure delivery has required fields
+    const safeDelivery = {
+      order: delivery.order,
+      deliveryPerson: delivery.deliveryPerson,
+      status: delivery.status || 'assigned',
+      address: delivery.address || {},
+      customerName: delivery.customerName || 'Customer',
+      contactPhone: delivery.contactPhone || '',
+      items: delivery.items || []
+    };
+    return api.post('/deliveries', safeDelivery);
+  },
   update: (id, delivery) => api.put(`/deliveries/${id}`, delivery),
   updateStatus: (id, status) => api.patch(`/deliveries/${id}/status`, { status }),
   assignDeliveryPerson: (id, deliveryPersonId) => 

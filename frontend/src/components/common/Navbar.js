@@ -29,22 +29,15 @@ const Navbar = () => {
       links.push(
         { path: '/customer', label: 'Dashboard', icon: 'house' },
         { path: '/customer/orders', label: 'My Orders', icon: 'cart' },
-        { path: '/customer/qr-scanner', label: 'QR Scanner', icon: 'qr-code' },
-        { path: '/customer/inquiries', label: 'Inquiries', icon: 'chat' }
       );
     } else if (isStaff()) {
       links.push(
         { path: '/staff', label: 'Dashboard', icon: 'house' },
-        { path: '/staff/tasks', label: 'Tasks', icon: 'list-check' },
-        { path: '/staff/inventory', label: 'Inventory', icon: 'box-seam' },
-        { path: '/staff/orders', label: 'Order Prep', icon: 'cart' }
       );
     } else if (isDeliveryPerson()) {
       links.push(
         { path: '/delivery', label: 'Dashboard', icon: 'house' },
         { path: '/delivery/tasks', label: 'Delivery Tasks', icon: 'truck' },
-        { path: '/delivery/qr-scanner', label: 'QR Scanner', icon: 'qr-code' },
-        { path: '/delivery/issues', label: 'Issues', icon: 'exclamation-triangle' }
       );
     }
 
