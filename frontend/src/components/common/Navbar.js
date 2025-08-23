@@ -20,10 +20,8 @@ const Navbar = () => {
       links.push(
         { path: '/admin', label: 'Admin Dashboard', icon: 'speedometer2' },
         { path: '/admin/customers', label: 'Customers', icon: 'people' },
-        { path: '/admin/inventory', label: 'Inventory', icon: 'box-seam' },
         { path: '/admin/orders', label: 'Orders', icon: 'cart' },
-        { path: '/admin/staff', label: 'Staff', icon: 'person-badge' },
-        { path: '/admin/deliveries', label: 'Deliveries', icon: 'truck' }
+
       );
     } else if (isCustomer()) {
       links.push(
