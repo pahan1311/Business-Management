@@ -14,9 +14,25 @@ class DeliveryPDFManager {
       console.log('📊 Delivery data:', deliveryData);
       console.log('🛒 Order data:', orderData);
       
-      // Step 1: Generate PDF
-      const pdf = await this.pdfService.generateDeliveryPDF(deliveryData, orderData);
-      console.log('✅ PDF generated successfully');
+      let pdf;
+      
+      // Check if we have valid order data
+      if (orderData && (orderData._id || orderData.id)) {
+        // Step 1: Generate PDF with all order details
+        pdf = await this.pdfService.generateOrderDetailsPDF(orderData, {
+          companyName: "Business Management System",
+          deliveryInfo: deliveryData
+        });
+        console.log('✅ PDF generated successfully with all order details');
+      } else {
+        // If no order data, use delivery data to generate a simple PDF
+        pdf = await this.pdfService.generateDeliveryPDF(deliveryData, {
+          // Create a minimal order object from delivery data
+          items: deliveryData.items || [],
+          totalAmount: deliveryData.totalAmount || 0
+        });
+        console.log('✅ PDF generated with delivery data only (no order details)')
+      }
 
       // Step 2: Get PDF as blob
       const pdfBlob = this.pdfService.getPDFBlob();
@@ -29,45 +45,130 @@ class DeliveryPDFManager {
       const deliveryId = (deliveryData.id || deliveryData._id || 'unknown').toString().substring(0, 8);
       const customerName = (deliveryData.customerName || 'customer').replace(/[^a-zA-Z0-9]/g, '_');
       const filename = `delivery_report_${deliveryId}_${customerName}_${timestamp}.pdf`;
-
-      console.log('Uploading PDF to Google Drive...');
-
-      // For demo purposes, we'll simulate the Google Drive upload
-      // In a real implementation, you would need to set up Google Drive API credentials
-      const mockUploadResult = await this.simulateGoogleDriveUpload(pdfBlob, filename);
       
-      // Step 4: Generate QR code for the file
-      const qrCodeData = await this.generateQRCodeForFile(mockUploadResult.shareableLink);
+      let uploadResult;
+      let qrCodeData;
+      let usedFallback = false;
+      
+      try {
+        console.log('Uploading PDF to Google Drive...');
+        // First try uploading to Google Drive to the specified folder
+        uploadResult = await this.realGoogleDriveUpload(pdfBlob, filename);
+        
+        // Generate QR code that points to the Google Drive file (just the link, not all data)
+        qrCodeData = await this.generateQRCodeForFile(uploadResult.shareableLink);
+        
+        // Also add QR code to the PDF itself
+        await this.pdfService.addQRCodeToPDF(uploadResult.shareableLink);
+        
+        // Get updated PDF blob with QR code
+        const updatedPdfBlob = this.pdfService.getPDFBlob();
+        
+        // Re-upload the updated PDF with QR code
+        const updatedFilename = `${filename.replace('.pdf', '_with_qr.pdf')}`;
+        uploadResult = await this.realGoogleDriveUpload(updatedPdfBlob, updatedFilename);
+      } catch (uploadError) {
+        console.log('⚠️ Google Drive upload failed, using fallback...', uploadError);
+        usedFallback = true;
+        
+        // Generate a simple web URL that can be used to access delivery info
+        const deliveryId = deliveryData.id || deliveryData._id;
+        const webUrl = `${window.location.origin}/delivery/${deliveryId}`;
+        
+        // Generate a QR code that points to this web URL (much smaller data)
+        uploadResult = {
+          fileName: filename,
+          fileId: 'local_' + Math.random().toString(36).substr(2, 9),
+          shareableLink: webUrl,
+          isLocalFile: true,
+          note: 'PDF generated locally (Google Drive unavailable)'
+        };
+        
+        qrCodeData = await this.generateQRCodeForFile(webUrl);
+        
+        // Also download the PDF since we couldn't upload it
+        try {
+          this.pdfService.downloadPDF(filename);
+        } catch (downloadError) {
+          console.error('💥 Local download also failed:', downloadError);
+        }
+      }
 
       return {
         success: true,
         pdfGenerated: true,
-        uploadResult: mockUploadResult,
+        uploadResult: uploadResult,
         qrCodeData: qrCodeData,
-        filename: filename
+        downloadableQRCode: await this.createDownloadableQRCode(qrCodeData, 
+          orderData || {
+            id: deliveryData.id || deliveryData._id,
+            orderNumber: deliveryData.orderId,
+            customerName: deliveryData.customerName
+          }, 
+          uploadResult.shareableLink
+        ),
+        filename: filename,
+        usedFallback: usedFallback,
+        orderDetails: orderData ? {
+          orderId: orderData.id || orderData._id,
+          orderNumber: orderData.orderNumber,
+          customerName: orderData.customerName || (orderData.customer ? orderData.customer.name : 'Unknown'),
+          totalItems: orderData.items ? orderData.items.length : 0,
+          totalAmount: orderData.totalAmount || 0
+        } : {
+          deliveryId: deliveryData.id || deliveryData._id,
+          orderId: deliveryData.orderId || (deliveryData.order ? deliveryData.order.id : null),
+          customerName: deliveryData.customerName,
+          totalItems: deliveryData.items ? deliveryData.items.length : 0
+        }
       };
 
     } catch (error) {
       console.error('💥 Error in PDF generation process:', error);
       
-      // Fallback: just generate and download PDF locally
+      // Ultimate fallback: just generate and download PDF locally
       const timestamp = new Date().toISOString().split('T')[0];
       const deliveryId = (deliveryData.id || deliveryData._id || 'unknown').toString().substring(0, 8);
       const customerName = (deliveryData.customerName || 'customer').replace(/[^a-zA-Z0-9]/g, '_');
       const filename = `delivery_report_${deliveryId}_${customerName}_${timestamp}.pdf`;
       
       try {
+        // Try to generate a simple delivery PDF without requiring order details
+        await this.pdfService.generateDeliveryPDF(deliveryData, {
+          items: deliveryData.items || [],
+          totalAmount: deliveryData.totalAmount || 0
+        });
+        
         this.pdfService.downloadPDF(filename);
+        
+        // Generate a simple QR code with web URL for delivery info (avoiding data size issues)
+        const deliveryId = deliveryData.id || deliveryData._id;
+        const webUrl = `${window.location.origin}/delivery/${deliveryId}`;
+        
+        const qrCodeData = await this.generateQRCodeForFile(webUrl);
+        
+        return {
+          success: false,
+          error: error.message,
+          fallback: true,
+          filename: filename,
+          qrCodeData: qrCodeData,
+          downloadableQRCode: await this.createDownloadableQRCode(qrCodeData, {
+            id: deliveryData.id || deliveryData._id,
+            orderNumber: deliveryData.orderId,
+            customerName: deliveryData.customerName
+          }, webUrl)
+        };
       } catch (downloadError) {
         console.error('💥 Even local download failed:', downloadError);
+        
+        return {
+          success: false,
+          error: error.message,
+          fallbackFailed: true,
+          filename: filename
+        };
       }
-      
-      return {
-        success: false,
-        error: error.message,
-        fallback: true,
-        filename: filename
-      };
     }
   }
 
@@ -128,7 +229,8 @@ class DeliveryPDFManager {
         color: {
           dark: '#000000',
           light: '#FFFFFF'
-        }
+        },
+        errorCorrectionLevel: 'H' // Higher error correction for better scanning
       });
       return qrCodeDataUrl;
     } catch (error) {
@@ -137,10 +239,104 @@ class DeliveryPDFManager {
     }
   }
 
+  // Method to create a downloadable QR code with order information
+  async createDownloadableQRCode(qrCodeDataUrl, orderData, fileUrl) {
+    try {
+      // Create a canvas to combine QR code with order info
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Set canvas size
+      canvas.width = 300;
+      canvas.height = 400;
+      
+      // Fill background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Load QR code image
+      const qrImage = new Image();
+      
+      return new Promise((resolve, reject) => {
+        qrImage.onload = () => {
+          // Draw QR code centered at the top
+          const qrSize = 200;
+          const qrX = (canvas.width - qrSize) / 2;
+          const qrY = 30;
+          ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+          
+          // Add title
+          ctx.fillStyle = '#333333';
+          ctx.font = 'bold 16px Arial';
+          ctx.textAlign = 'center';
+          
+          // Check if we have order data or delivery data
+          if (orderData && (orderData.orderNumber || orderData._id || orderData.id)) {
+            ctx.fillText('Order Details', canvas.width / 2, qrY + qrSize + 30);
+            
+            // Add order details
+            ctx.font = '12px Arial';
+            const infoY = qrY + qrSize + 60;
+            ctx.fillText(`Order #: ${orderData.orderNumber || orderData.id || orderData._id || 'N/A'}`, canvas.width / 2, infoY);
+            ctx.fillText(`Customer: ${orderData.customerName || (orderData.customer ? orderData.customer.name : 'N/A')}`, canvas.width / 2, infoY + 20);
+            ctx.fillText(`Date: ${new Date().toLocaleDateString()}`, canvas.width / 2, infoY + 40);
+            
+            // Add scanning instructions
+            ctx.font = 'italic 10px Arial';
+            ctx.fillStyle = '#666666';
+            ctx.fillText('Scan QR code to access complete order details', canvas.width / 2, infoY + 70);
+          } else {
+            ctx.fillText('Delivery Details', canvas.width / 2, qrY + qrSize + 30);
+            
+            // Add delivery details
+            ctx.font = '12px Arial';
+            const infoY = qrY + qrSize + 60;
+            ctx.fillText(`Delivery ID: ${orderData.id || 'N/A'}`, canvas.width / 2, infoY);
+            ctx.fillText(`Customer: ${orderData.customerName || 'N/A'}`, canvas.width / 2, infoY + 20);
+            ctx.fillText(`Date: ${new Date().toLocaleDateString()}`, canvas.width / 2, infoY + 40);
+            
+            // Add scanning instructions
+            ctx.font = 'italic 10px Arial';
+            ctx.fillStyle = '#666666';
+            ctx.fillText('Scan QR code to access delivery information', canvas.width / 2, infoY + 70);
+          }
+          
+          // Convert to data URL
+          const finalDataURL = canvas.toDataURL('image/png');
+          resolve(finalDataURL);
+        };
+        
+        qrImage.onerror = () => {
+          reject(new Error('Failed to load QR code image'));
+        };
+        
+        qrImage.src = qrCodeDataUrl;
+      });
+    } catch (error) {
+      console.error('Error creating downloadable QR code:', error);
+      throw error;
+    }
+  }
+
   // Method to just generate and download PDF locally
   async generateAndDownloadPDF(deliveryData, orderData) {
     try {
-      const pdf = await this.pdfService.generateDeliveryPDF(deliveryData, orderData);
+      let pdf;
+      
+      if (orderData && (orderData._id || orderData.id)) {
+        // If we have valid order data
+        pdf = await this.pdfService.generateOrderDetailsPDF(orderData, {
+          companyName: "Business Management System",
+          deliveryInfo: deliveryData
+        });
+      } else {
+        // If no order data, use delivery data to generate a simple PDF
+        pdf = await this.pdfService.generateDeliveryPDF(deliveryData, {
+          // Create a minimal order object from delivery data
+          items: deliveryData.items || [],
+          totalAmount: deliveryData.totalAmount || 0
+        });
+      }
       
       const timestamp = new Date().toISOString().split('T')[0];
       const deliveryId = (deliveryData.id || deliveryData._id || 'unknown').toString().substring(0, 8);
@@ -156,6 +352,138 @@ class DeliveryPDFManager {
       };
     } catch (error) {
       console.error('Error generating PDF:', error);
+      throw error;
+    }
+  }
+
+  // Method to download QR code
+  downloadQRCode(qrCodeData, orderData) {
+    try {
+      const timestamp = new Date().toISOString().split('T')[0];
+      const orderId = (orderData.id || orderData._id || 'unknown').toString().substring(0, 8);
+      const customerName = (orderData.customerName || orderData.customer?.name || 'customer').replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `order_qr_${orderId}_${customerName}_${timestamp}.png`;
+      
+      const link = document.createElement('a');
+      link.href = qrCodeData;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      return {
+        success: true,
+        message: 'QR code downloaded successfully',
+        filename: filename
+      };
+    } catch (error) {
+      console.error('Error downloading QR code:', error);
+      throw error;
+    }
+  }
+
+  // Main method to create PDF with order data and assigned person, upload to Drive, and generate QR
+  async createOrderPDFWithQR(orderData, assignedPersonData) {
+    try {
+      console.log('🚀 Starting complete order PDF with QR generation...');
+      console.log('📊 Order data:', orderData);
+      console.log('👤 Assigned person data:', assignedPersonData);
+
+      // Prepare comprehensive delivery info
+      const deliveryInfo = {
+        deliveryPerson: assignedPersonData?.name || assignedPersonData?.displayName || 'Not Assigned',
+        contactPhone: assignedPersonData?.phone || assignedPersonData?.contactPhone || 'N/A',
+        email: assignedPersonData?.email || 'N/A',
+        status: orderData.status || 'Pending',
+        scheduledDate: orderData.scheduledDate || new Date().toISOString(),
+        assignedStaff: assignedPersonData?.name || 'Not Assigned'
+      };
+
+      // Generate comprehensive PDF with order details and assigned person
+      const pdf = await this.pdfService.generateOrderDetailsPDF(orderData, {
+        companyName: "Business Management System",
+        deliveryInfo: deliveryInfo
+      });
+
+      console.log('✅ PDF generated with order and assigned person details');
+
+      // Get PDF as blob
+      const pdfBlob = this.pdfService.getPDFBlob();
+      if (!pdfBlob) {
+        throw new Error('Failed to generate PDF blob');
+      }
+
+      // Create filename
+      const timestamp = new Date().toISOString().split('T')[0];
+      const orderId = (orderData.id || orderData._id || 'unknown').toString().substring(0, 8);
+      const customerName = (orderData.customer?.name || 'customer').replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `order_${orderId}_${customerName}_${timestamp}.pdf`;
+
+      let uploadResult;
+      let qrCodeData;
+
+      try {
+        console.log('📤 Uploading PDF to Google Drive...');
+        // Upload to Google Drive
+        uploadResult = await this.realGoogleDriveUpload(pdfBlob, filename);
+        
+        // Generate QR code with just the Google Drive link
+        qrCodeData = await this.generateQRCodeForFile(uploadResult.shareableLink);
+        
+        console.log('✅ PDF uploaded and QR code generated successfully');
+
+        return {
+          success: true,
+          pdfInfo: {
+            fileName: uploadResult.fileName,
+            fileId: uploadResult.fileId,
+            shareableLink: uploadResult.shareableLink
+          },
+          qrCode: {
+            dataURL: qrCodeData,
+            downloadableQR: await this.createDownloadableQRCode(qrCodeData, orderData, uploadResult.shareableLink),
+            targetLink: uploadResult.shareableLink
+          },
+          orderDetails: {
+            orderId: orderData._id || orderData.id,
+            orderNumber: orderData.orderNumber,
+            customerName: orderData.customer?.name,
+            assignedPerson: assignedPersonData?.name,
+            totalAmount: orderData.totalAmount
+          }
+        };
+
+      } catch (uploadError) {
+        console.log('⚠️ Google Drive upload failed, using local fallback...', uploadError);
+        
+        // Fallback: Download PDF locally and create web URL for QR
+        this.pdfService.downloadPDF(filename);
+        
+        const orderId = orderData.id || orderData._id;
+        const webUrl = `${window.location.origin}/order/${orderId}`;
+        qrCodeData = await this.generateQRCodeForFile(webUrl);
+
+        return {
+          success: true,
+          fallback: true,
+          localFile: filename,
+          qrCode: {
+            dataURL: qrCodeData,
+            downloadableQR: await this.createDownloadableQRCode(qrCodeData, orderData, webUrl),
+            targetLink: webUrl
+          },
+          orderDetails: {
+            orderId: orderData._id || orderData.id,
+            orderNumber: orderData.orderNumber,
+            customerName: orderData.customer?.name,
+            assignedPerson: assignedPersonData?.name,
+            totalAmount: orderData.totalAmount
+          }
+        };
+      }
+
+    } catch (error) {
+      console.error('❌ Error in order PDF generation:', error);
       throw error;
     }
   }

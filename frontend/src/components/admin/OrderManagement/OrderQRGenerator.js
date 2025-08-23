@@ -1,12 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import { Modal, Button, Card, Row, Col, Alert, ProgressBar, ListGroup, Spinner } from 'react-bootstrap';
-import orderQRService from '../../../services/orderQRService';
+import OrderQRService from '../../../services/orderQRService';
 
 const OrderQRGenerator = ({ order, show, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
+  const orderQRService = new OrderQRService();
   const [steps, setSteps] = useState(orderQRService.getProcessingSteps());
 
   const updateStepStatus = useCallback((stepId, status) => {

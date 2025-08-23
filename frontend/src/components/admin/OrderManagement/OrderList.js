@@ -7,6 +7,7 @@ import LoadingSpinner from '../../common/LoadingSpinner';
 import { formatDate, formatCurrency, getStatusBadgeColor } from '../../../utils/helpers';
 import { ORDER_STATUS } from '../../../utils/constants';
 import OrderDetail from './OrderDetail';
+import PDFQRModal from './PDFQRModal';
 import { Modal, Form, Image } from 'react-bootstrap';
 import QRCodeService from '../../../services/qrCodeService';
 import DeliveryPDFManager from '../../../services/deliveryPDFManager';
@@ -639,77 +640,50 @@ const OrderList = () => {
         console.warn("No related order found for delivery, generating PDF with available data");
       }
 
-      // Generate PDF and upload to Google Drive
+      // Generate PDF, upload to Google Drive and create QR code
       const result = await pdfManager.generateAndUploadDeliveryPDF(delivery, relatedOrder);
       
       if (result.success) {
-        // Create a custom modal for QR code display with download option
-        const qrWindow = window.open('', '_blank', 'width=500,height=600');
-        qrWindow.document.write(`
-          <html>
-            <head>
-              <title>PDF Report - QR Code Access</title>
-              <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-              <style>
-                body { padding: 20px; text-align: center; font-family: Arial, sans-serif; }
-                .qr-container { margin: 20px 0; }
-                .btn-group { margin: 15px 0; }
-                .info-card { background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <h3 class="text-primary">📄 PDF Report Generated Successfully</h3>
-                
-                <div class="info-card">
-                  <h5>Delivery Information</h5>
-                  <p><strong>Delivery ID:</strong> ${delivery.id || delivery._id}</p>
-                  <p><strong>Customer:</strong> ${delivery.customerName || 'N/A'}</p>
-                  <p><strong>File:</strong> ${result.filename}</p>
-                </div>
-                
-                <div class="qr-container">
-                  <h5>Scan QR Code to Access PDF</h5>
-                  <img src="${result.qrCodeData}" alt="QR Code" style="max-width: 250px; border: 1px solid #ddd; padding: 10px;"/>
-                </div>
-                
-                <div class="btn-group d-flex flex-column gap-2">
-                  <button class="btn btn-success" onclick="downloadQRCode()">
-                    📥 Download QR Code
-                  </button>
-                  <a href="${result.uploadResult.shareableLink}" target="_blank" class="btn btn-primary">
-                    🔗 Open PDF in Google Drive
-                  </a>
-                  <button class="btn btn-secondary" onclick="window.close()">
-                    ✕ Close
-                  </button>
-                </div>
-                
-                ${result.uploadResult.note ? `
-                  <div class="alert alert-info mt-3">
-                    <small>${result.uploadResult.note}</small>
-                  </div>
-                ` : ''}
-              </div>
-              
-              <script>
-                function downloadQRCode() {
-                  const link = document.createElement('a');
-                  link.download = 'qr_code_${delivery.id || delivery._id}_${new Date().toISOString().split('T')[0]}.png';
-                  link.href = '${result.qrCodeData}';
-                  link.click();
-                }
-              </script>
-            </body>
-          </html>
-        `);
+        console.log('✅ PDF report generated successfully');
+        console.log('📋 Result data:', result);
+        
+        // Get the QR code data
+        setQRCodeData(result.qrCodeData);
+        
+        // Store the delivery with the shareable link
+        const enhancedDelivery = {
+          ...delivery,
+          shareableLink: result.uploadResult?.shareableLink,
+          uploadResult: result.uploadResult,
+          filename: result.filename,
+          usedFallback: result.usedFallback
+        };
+        
+        console.log('📋 Enhanced delivery with link:', enhancedDelivery);
+        setSelectedDeliveryForQR(enhancedDelivery);
+        
+        // Show QR code modal with the generated QR
+        setShowQRModal(true);
+        
+        // Show appropriate message depending on whether fallback was used
+        if (result.usedFallback) {
+          console.log('⚠️ Used fallback method - PDF generated locally');
+        } else {
+          console.log('🚀 PDF uploaded to Google Drive successfully');
+        }
       } else {
-        throw new Error(result.error || 'Unknown error occurred');
+        throw new Error(result.error || 'Failed to generate PDF report');
       }
       
     } catch (error) {
       console.error('Error generating PDF report:', error);
-      alert(`Error generating PDF report: ${error.message || 'Unknown error'}`);
+      
+      // More user-friendly error message
+      const errorMessage = error && error.message 
+        ? `Could not generate PDF report: ${error.message}`
+        : 'Could not generate PDF report due to an unknown error. Please try again.';
+        
+      alert(errorMessage);
     } finally {
       setPdfGenerating(false);
     }
@@ -1111,244 +1085,18 @@ const OrderList = () => {
         </Modal.Body>
       </Modal>
       
-      {/* Enhanced QR Code Modal with Comprehensive Details */}
-      <Modal show={showQRModal} onHide={() => setShowQRModal(false)} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>
-            <i className="bi bi-qr-code me-2"></i>
-            Comprehensive Delivery QR Code
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <div className="row">
-            {/* QR Code Section */}
-            <div className="col-md-5">
-              <div className="text-center">
-                <h6 className="mb-3">QR Code</h6>
-                {qrCodeData ? (
-                  <div className="border p-3 mb-3 rounded bg-light">
-                    <Image 
-                      src={qrCodeData} 
-                      alt="Comprehensive Delivery QR Code" 
-                      className="img-fluid mb-2" 
-                      style={{ maxWidth: '250px', minHeight: '250px' }} 
-                    />
-                    <p className="mb-0 text-muted">
-                      <small>
-                        <i className="bi bi-shield-check me-1"></i>
-                        Contains complete order & delivery details
-                      </small>
-                    </p>
-                  </div>
-                ) : (
-                  <div className="d-flex justify-content-center my-5">
-                    <div className="spinner-border text-primary" role="status">
-                      <span className="visually-hidden">Generating QR Code...</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Comprehensive Details Section */}
-            <div className="col-md-7">
-              <div className="h-100" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                
-                {/* Order Information */}
-                {selectedDeliveryForQR && (
-                  <div className="mb-4">
-                    <h6 className="text-primary border-bottom pb-2 mb-3">
-                      <i className="bi bi-cart3 me-2"></i>Order Details
-                    </h6>
-                    <div className="row">
-                      <div className="col-6">
-                        <p className="mb-1"><strong>Order ID:</strong></p>
-                        <p className="text-muted small mb-2">
-                          {typeof selectedDeliveryForQR.order === 'object' 
-                            ? selectedDeliveryForQR.order?._id || selectedDeliveryForQR.order?.id || 'N/A'
-                            : selectedDeliveryForQR.order?.toString() || 'N/A'}
-                        </p>
-                      </div>
-                      <div className="col-6">
-                        <p className="mb-1"><strong>Delivery ID:</strong></p>
-                        <p className="text-muted small mb-2">
-                          {selectedDeliveryForQR._id?.toString() || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="mb-1"><strong>Status:</strong> 
-                      <span className={`badge ms-2 bg-${getStatusBadgeColor(selectedDeliveryForQR.status)}`}>
-                        {selectedDeliveryForQR.status || 'Unknown'}
-                      </span>
-                    </p>
-                    {selectedDeliveryForQR.totalAmount && (
-                      <p className="mb-1"><strong>Total Amount:</strong> 
-                        <span className="text-success fw-bold ms-2">
-                          ${typeof selectedDeliveryForQR.totalAmount === 'object' 
-                            ? selectedDeliveryForQR.totalAmount.toString() 
-                            : selectedDeliveryForQR.totalAmount}
-                        </span>
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Customer Information */}
-                {selectedDeliveryForQR && (
-                  <div className="mb-4">
-                    <h6 className="text-success border-bottom pb-2 mb-3">
-                      <i className="bi bi-person me-2"></i>Customer Information
-                    </h6>
-                    <p className="mb-1"><strong>Name:</strong> {selectedDeliveryForQR.customerName || 'N/A'}</p>
-                    <p className="mb-1"><strong>Delivery Address:</strong></p>
-                    <p className="text-muted small mb-2">{selectedDeliveryForQR.address || 'Address not available'}</p>
-                  </div>
-                )}
-
-                {/* Delivery Person Information */}
-                <div className="mb-4">
-                  <h6 className="text-warning border-bottom pb-2 mb-3">
-                    <i className="bi bi-truck me-2"></i>Delivery Personnel
-                  </h6>
-                  {selectedDeliveryForQR && selectedDeliveryForQR.deliveryPersonName ? (
-                    <>
-                      <p className="mb-1"><strong>Name:</strong> {selectedDeliveryForQR.deliveryPersonName}</p>
-                      <p className="mb-1"><strong>ID:</strong> 
-                        {typeof selectedDeliveryForQR.deliveryPerson === 'object' 
-                          ? selectedDeliveryForQR.deliveryPerson?._id?.toString() || selectedDeliveryForQR.deliveryPerson?.id?.toString() || 'N/A'
-                          : selectedDeliveryForQR.deliveryPerson?.toString() || 'N/A'}
-                      </p>
-                    </>
-                  ) : currentOrderForDelivery && currentOrderForDelivery.deliveryPerson ? (
-                    <>
-                      <p className="mb-1"><strong>Name:</strong> {currentOrderForDelivery.deliveryPerson.name || 'N/A'}</p>
-                      <p className="mb-1"><strong>Contact:</strong> {currentOrderForDelivery.deliveryPerson.phone || 'N/A'}</p>
-                      <p className="mb-1"><strong>ID:</strong> 
-                        {typeof currentOrderForDelivery.deliveryPerson._id === 'object' 
-                          ? currentOrderForDelivery.deliveryPerson._id?.toString() || 'N/A'
-                          : currentOrderForDelivery.deliveryPerson._id?.toString() || 'N/A'}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-muted">No delivery person assigned yet</p>
-                  )}
-                </div>
-
-                {/* Items Information */}
-                {(selectedDeliveryForQR?.items || currentOrderForDelivery?.items) && (
-                  <div className="mb-4">
-                    <h6 className="text-info border-bottom pb-2 mb-3">
-                      <i className="bi bi-box-seam me-2"></i>Items ({(selectedDeliveryForQR?.items || currentOrderForDelivery?.items || []).length})
-                    </h6>
-                    <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
-                      {(selectedDeliveryForQR?.items || currentOrderForDelivery?.items || []).slice(0, 5).map((item, index) => {
-                        const productName = item.product?.name || item.productName || item.name || 'Unknown Product';
-                        const quantity = item.quantity || 0;
-                        const price = item.price || item.product?.price || 0;
-                        const total = (quantity * price).toFixed(2);
-                        
-                        return (
-                          <div key={index} className="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded">
-                            <div>
-                              <small className="fw-bold">{productName}</small>
-                              <div className="text-muted" style={{ fontSize: '0.75em' }}>
-                                Qty: {quantity} × ${price}
-                              </div>
-                            </div>
-                            <small className="text-success fw-bold">
-                              ${total}
-                            </small>
-                          </div>
-                        );
-                      })}
-                      {(selectedDeliveryForQR?.items || currentOrderForDelivery?.items || []).length > 5 && (
-                        <p className="text-muted text-center mb-0">
-                          <small>+ {(selectedDeliveryForQR?.items || currentOrderForDelivery?.items || []).length - 5} more items</small>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* QR Code Information */}
-                <div className="mb-3">
-                  <h6 className="text-secondary border-bottom pb-2 mb-3">
-                    <i className="bi bi-info-circle me-2"></i>QR Code Information
-                  </h6>
-                  <p className="mb-1"><small><strong>Generated:</strong> {new Date().toLocaleString()}</small></p>
-                  <p className="mb-1"><small><strong>Valid Until:</strong> {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</small></p>
-                  <p className="mb-0"><small><strong>Type:</strong> Comprehensive Delivery Order</small></p>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Status Alert */}
-          <div className="mt-3">
-            {!deliveryConfirmed ? (
-              <div className="alert alert-info mb-0">
-                <i className="bi bi-info-circle me-2"></i>
-                <strong>Next Step:</strong> Confirm the delivery to update status to "In Transit"
-              </div>
-            ) : (
-              <div className="alert alert-success mb-0">
-                <i className="bi bi-check-circle me-2"></i>
-                <strong>Confirmed!</strong> Delivery status updated to "In Transit"
-              </div>
-            )}
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowQRModal(false)}>
-            Close
-          </Button>
-          <Button variant="primary" onClick={downloadQRCode}>
-            <i className="bi bi-download me-2"></i>
-            Download QR Code
-          </Button>
-          {!deliveryConfirmed && (currentOrderForDelivery || selectedDeliveryForQR) && (
-            <Button 
-              variant="success" 
-              onClick={() => {
-                if (selectedDeliveryForQR) {
-                  // If we have a selected delivery from the deliveries tab
-                  handleConfirmDelivery({
-                    _id: selectedDeliveryForQR._id,
-                    order: selectedDeliveryForQR.order
-                  });
-                } else if (currentOrderForDelivery && currentOrderForDelivery.deliveryId) {
-                  // Use the deliveryId we stored in the order object
-                  const deliveryObj = {
-                    _id: currentOrderForDelivery.deliveryId,
-                    order: currentOrderForDelivery._id || currentOrderForDelivery.id
-                  };
-                  handleConfirmDelivery(deliveryObj);
-                } else {
-                  // If somehow we don't have the deliveryId, just update the order status
-                  handleConfirmDelivery({
-                    _id: null,
-                    order: (currentOrderForDelivery && (currentOrderForDelivery._id || currentOrderForDelivery.id)) || 
-                           (selectedDeliveryForQR && selectedDeliveryForQR.order)
-                  });
-                }
-              }}
-              disabled={modalLoading}
-            >
-              {modalLoading ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                  Confirming...
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-check-circle me-2"></i>
-                  Confirm Delivery
-                </>
-              )}
-            </Button>
-          )}
-        </Modal.Footer>
-      </Modal>
+      {/* PDF and QR Modal */}
+      <PDFQRModal
+        show={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        qrCodeData={qrCodeData}
+        pdfData={selectedDeliveryForQR ? {
+          fileName: selectedDeliveryForQR.uploadResult?.fileName || `delivery_report_${selectedDeliveryForQR._id}.pdf`,
+          shareableLink: selectedDeliveryForQR.shareableLink || selectedDeliveryForQR.uploadResult?.shareableLink,
+          fileId: selectedDeliveryForQR.uploadResult?.fileId
+        } : null}
+        onDownloadQR={downloadQRCode}
+      />
     </div>
   );
 };

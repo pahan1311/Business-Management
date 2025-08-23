@@ -242,4 +242,4 @@ class OrderQRService {
   }
 }
 
-export default new OrderQRService();
+export default OrderQRService;

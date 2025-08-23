@@ -174,6 +174,13 @@ class PDFService {
     }
     return null;
   }
+  
+  getPDFDataUri() {
+    if (this.doc) {
+      return this.doc.output('datauristring');
+    }
+    return null;
+  }
 
   // Generate comprehensive order details PDF with table format
   async generateOrderDetailsPDF(orderData, additionalInfo = {}) {
@@ -210,6 +217,17 @@ class PDFService {
         ['Order Date', orderData.createdAt ? new Date(orderData.createdAt).toLocaleDateString() : 'N/A'],
         ['Total Amount', orderData.totalAmount ? `$${orderData.totalAmount.toFixed(2)}` : 'N/A']
       ];
+
+      // Add delivery/assigned person info if available
+      if (additionalInfo.deliveryInfo) {
+        const deliveryInfo = additionalInfo.deliveryInfo;
+        orderInfoData.push(
+          ['Assigned Person', deliveryInfo.deliveryPerson || deliveryInfo.assignedStaff || 'N/A'],
+          ['Delivery Status', deliveryInfo.status || 'N/A'],
+          ['Delivery Phone', deliveryInfo.contactPhone || 'N/A'],
+          ['Delivery Date', deliveryInfo.scheduledDate ? new Date(deliveryInfo.scheduledDate).toLocaleDateString() : 'N/A']
+        );
+      }
 
       this.doc.autoTable({
         startY: 70,
